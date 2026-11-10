@@ -1,8 +1,9 @@
 // Only an opaque bearer token is stored; never the student's four-digit code.
 export default function(component) {
     const { data, parentElement, setStateValue } = component;
-    if (data.acknowledged || parentElement.dataset.requestId === data.id) return;
-    parentElement.dataset.requestId = data.id;
+    const host = parentElement.host || parentElement;
+    if (data.acknowledged || host.dataset.requestId === data.id) return;
+    host.dataset.requestId = data.id;
     const storageKey = "project-votes:2026-2027:student-session:" + window.location.pathname;
     let token = null;
     let ok = true;
