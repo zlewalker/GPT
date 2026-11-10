@@ -129,8 +129,18 @@ def main():
                     assert_no_overflow(page)
                     page.screenshot(path=str(output / f'{label}-ranking.png'), full_page=True)
                     page.get_by_role('tab', name='📈 Grafici', exact=True).click()
-                    charts = page.locator('canvas.marks')
-                    expect(charts).to_have_count(2, timeout=30000)
+                    expect(page.get_by_text('Medie delle singole lezioni per materia', exact=True)).to_be_visible()
+                    charts = page.locator('canvas.marks, svg.marks')
+                    try:
+                        expect(charts).to_have_count(2, timeout=15000)
+                    except AssertionError:
+                        page.screenshot(path=str(output / f'{label}-charts-debug.png'), full_page=True)
+                        print('Chart page errors:', errors)
+                        print('Chart roots:', page.locator('canvas, svg').evaluate_all(
+                            'elements => elements.map(e => ({tag:e.tagName, cls:e.getAttribute("class"), role:e.getAttribute("role"), testid:e.closest("[data-testid]")?.getAttribute("data-testid")}))'
+                        ))
+                        print('Chart messages:', page.locator('[data-testid="stException"], [role="alert"]').all_text_contents())
+                        raise
                     for chart in charts.all():
                         assert_fits(page, chart, 'chart canvas')
                     assert_no_overflow(page)
