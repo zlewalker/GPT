@@ -144,6 +144,27 @@ class PostgresTests(unittest.TestCase):
         with postgres.connect() as con:
             self.assertEqual(con.execute('SELECT current_schema()').fetchone()[0], self.schema)
 
+    def test_runtime_role_can_login_vote_and_logout(self):
+        from contextlib import contextmanager
+        import voter_auth
+        original_connect = postgres.connect
+
+        @contextmanager
+        def runtime_connect():
+            with original_connect() as con:
+                con.execute(f'SET LOCAL ROLE "{self.role}"')
+                yield con
+
+        with patch.object(postgres, 'connect', runtime_connect):
+            token, _, retry = voter_auth.login('0123')
+            self.assertEqual(retry, 0)
+            self.assertTrue(voter_auth.is_authenticated(token))
+            voter_auth.add_vote(self.lessons[0]['id'], token, 5)
+            self.assertEqual(len(voter_auth.list_lessons(token)), 1)
+            voter_auth.logout(token)
+            self.assertFalse(voter_auth.is_authenticated(token))
+        self.assertEqual(db.teacher_stats()[0]['total_votes'], 1)
+
     def test_runtime_role_can_vote_but_cannot_change_roster_or_delete(self):
         import psycopg
         with postgres.connect() as con:

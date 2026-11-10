@@ -1,4 +1,4 @@
-"""Opaque, revocable student sessions. Raw codes and tokens are never persisted."""
+"""Opaque, revocable sessions. Server-side storage contains hashes, not credentials."""
 import hashlib
 import re
 import secrets
