@@ -23,7 +23,7 @@ All'avvio, se il CSV è presente, l'app importa le assegnazioni senza duplicarle
 - Tutti i dati appartengono al 2026/2027; la gestione degli anni successivi è rinviata.
 - Media di tutti i voti con uguale peso; arrotondamento a due decimali con mezzi centesimi verso l'alto prima di assegnare il tier.
 - S da 4,50; A da 4,00; B da 3,00; C da 2,00; D sotto 2,00.
-- Classifica dopo 3 voti per professore; grafico dopo 3 voti per lezione. Aggiornamento ogni 15 secondi.
+- Classifica dopo 3 voti per professore; grafico dopo 3 voti per lezione. Nessun aggiornamento automatico: per vedere i nuovi dati, usare “Aggiorna risultati” nella barra laterale o ricaricare la pagina.
 - Dopo 5 PIN errati consecutivi, nuovi accessi amministratore bloccati globalmente per 15 minuti. Un accesso riuscito azzera gli errori.
 
 ## Separazione dei dati
