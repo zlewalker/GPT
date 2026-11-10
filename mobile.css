@@ -1,0 +1,43 @@
+/* Scoped, responsive additions. Keep native keyboard focus and browser zoom. */
+.mobile-rankings { display: none; }
+.pv-lesson, .pv-rank-card {
+    border: 1px solid rgba(128,128,128,.35);
+    border-radius: .75rem;
+    padding: .85rem 1rem;
+    overflow-wrap: anywhere;
+}
+.pv-lesson-title { font-size: 1.05rem; font-weight: 650; margin: .3rem 0; line-height: 1.45; }
+.pv-lesson-meta, .pv-rank-meta { font-size: .9rem; line-height: 1.5; }
+.pv-rank-heading { display: flex; align-items: start; gap: .6rem; }
+.pv-tier { border: 1px solid currentColor; border-radius: .4rem; padding: .15rem .5rem; font-weight: 700; flex-shrink: 0; }
+.pv-rank-name { font-weight: 650; font-size: 1rem; line-height: 1.4; }
+@media (max-width: 640px) {
+    [data-testid="stMainBlockContainer"] { padding: 3.7rem 1rem 2.5rem; }
+    h1 { font-size: 1.9rem !important; }
+    h2 { font-size: 1.4rem !important; }
+    h3 { font-size: 1.2rem !important; }
+    [data-testid="stButton"] button, [data-testid="stFormSubmitButton"] button,
+    [role="tab"], input { min-height: 44px; }
+    input, [role="combobox"] { font-size: 16px !important; }
+    [role="tab"] { padding-left: .5rem; padding-right: .5rem; }
+    [data-testid="stRadio"] [role="radiogroup"] {
+        display: flex; flex-wrap: nowrap; justify-content: space-between; gap: .25rem;
+    }
+    [data-testid="stRadio"] [role="radiogroup"] > label {
+        min-width: 44px; min-height: 44px; margin: 0;
+        padding: .25rem; border: 1px solid rgba(128,128,128,.35); border-radius: .5rem;
+        justify-content: center;
+    }
+    .st-key-ranking_table { display: none; }
+    .mobile-rankings { display: grid; gap: .65rem; }
+    .st-key-ranking_metrics [data-testid="stHorizontalBlock"],
+    .st-key-history_metrics [data-testid="stHorizontalBlock"],
+    .st-key-page_actions [data-testid="stHorizontalBlock"] { flex-wrap: nowrap; gap: .5rem; }
+    .st-key-ranking_metrics [data-testid="stColumn"],
+    .st-key-history_metrics [data-testid="stColumn"],
+    .st-key-page_actions [data-testid="stColumn"] { min-width: 0; flex: 1 1 0; width: 0; }
+    .st-key-ranking_metrics [data-testid="stMetricLabel"] p,
+    .st-key-history_metrics [data-testid="stMetricLabel"] p { font-size: .78rem; white-space: normal; line-height: 1.25; }
+    .st-key-ranking_metrics [data-testid="stMetricValue"],
+    .st-key-history_metrics [data-testid="stMetricValue"] { font-size: 1.4rem; }
+}

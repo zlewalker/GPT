@@ -66,7 +66,7 @@ def main():
                 page.reload()
                 expect(page.get_by_text('Non ci sono lezioni da votare. Potresti averle già valutate tutte.', exact=True)).to_be_visible(timeout=30000)
                 assert db.teacher_stats()[0]['total_votes'] == 1
-                page.get_by_role('button', name='Esci dall’accesso studente', exact=True).click()
+                page.get_by_role('button', name='Esci', exact=True).click()
                 expect(field).to_be_visible()
                 page.wait_for_function('(key) => localStorage.getItem(key) === null', arg=key)
                 # A copied token is unusable after logout, not just hidden in the UI.
