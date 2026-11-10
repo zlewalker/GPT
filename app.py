@@ -287,7 +287,7 @@ def show_history(stats):
                     {'field': 'Media', 'type': 'quantitative', 'format': '.2f'},
                 ],
             },
-            'config': {'view': {'stroke': None}},
+            'config': {'view': {'stroke': None}, 'axis': {'labelFontSize': 12, 'titleFontSize': 12}, 'legend': {'labelFontSize': 12, 'titleFontSize': 12}},
         }, width='stretch')
         st.caption(f'Ogni barra mostra la percentuale di voti da 1 a 5 ricevuti dal professore, su tutte le sue lezioni. Tocca le barre o apri i conteggi per leggere i dettagli. Sono inclusi i professori con almeno {MIN_VOTES} voti totali.')
         with st.expander('Conteggi dei voti per professore'):
@@ -368,7 +368,7 @@ def show_history(stats):
                 },
             },
         ],
-        'config': {'view': {'stroke': None}, 'axis': {'gridOpacity': 0.15, 'domain': False, 'tickSize': 0}},
+        'config': {'view': {'stroke': None}, 'axis': {'gridOpacity': 0.15, 'domain': False, 'tickSize': 0, 'labelFontSize': 12, 'titleFontSize': 12}, 'legend': {'labelFontSize': 12, 'titleFontSize': 12}},
     }, width='stretch')
     st.caption(f'Ogni punto rappresenta una lezione con almeno {MIN_VOTES} voti, in ordine cronologico. M = mattina, P = pomeriggio. Tocca i punti o apri il dettaglio delle lezioni. La media riepilogativa pesa ogni voto allo stesso modo e include solo le lezioni visibili. Per aggiornare i risultati, premi “Aggiorna risultati” nella barra laterale o ricarica la pagina.')
     if len(frame) == 1:

@@ -17,7 +17,7 @@
     h2 { font-size: 1.4rem !important; }
     h3 { font-size: 1.2rem !important; }
     [data-testid="stButton"] button, [data-testid="stFormSubmitButton"] button,
-    [role="tab"], input { min-height: 44px; }
+    [role="tab"], input:not([type="radio"]):not([type="checkbox"]) { min-height: 44px; }
     input, [role="combobox"] { font-size: 16px !important; }
     [role="tab"] { padding-left: .5rem; padding-right: .5rem; }
     [data-testid="stRadio"] [role="radiogroup"] {
