@@ -130,7 +130,7 @@ def main():
                     page.screenshot(path=str(output / f'{label}-ranking.png'), full_page=True)
                     page.get_by_role('tab', name='📈 Grafici', exact=True).click()
                     expect(page.get_by_text('Medie delle singole lezioni per materia', exact=True)).to_be_visible()
-                    charts = page.locator('canvas.marks, svg.marks')
+                    charts = page.get_by_test_id('stVegaLiteChart').locator('canvas, svg')
                     try:
                         expect(charts).to_have_count(2, timeout=15000)
                     except AssertionError:
