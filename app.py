@@ -169,6 +169,17 @@ def show_history():
     st.markdown('#### Confronto delle votazioni dei professori')
     stats = [r for r in db.teacher_stats() if r['total_votes'] >= MIN_VOTES]
     if stats:
+        # Streamlit can reload app.py while retaining the previous database module.
+        # Fetch missing counts directly until that process restarts.
+        if any(f'rating_{rating}' not in r for r in stats for rating in range(1, 6)):
+            with db.connect() as con:
+                counts = con.execute('''
+                    SELECT l.teacher_id, v.rating, COUNT(*) AS vote_count
+                    FROM votes v JOIN lessons l ON l.id = v.lesson_id
+                    GROUP BY l.teacher_id, v.rating
+                ''').fetchall()
+            lookup = {(row['teacher_id'], int(row['rating'])): int(row['vote_count']) for row in counts}
+            stats = [dict(r, **{f'rating_{rating}': lookup.get((r['id'], rating), 0) for rating in range(1, 6)}) for r in stats]
         distribution = pd.DataFrame([
             {
                 'Professore': f"{r['name']} · {r['subject']}",
