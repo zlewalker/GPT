@@ -38,13 +38,15 @@ st.title('🎓 Project Votes')
 st.caption(f'Anno scolastico {db.SCHOOL_YEAR} - Valuta le lezioni e segui la tier list della classe.')
 
 with st.sidebar:
+    st.button('🔄 Aggiorna risultati', key='refresh_results', help='Ricarica i dati di Top 3, classifica e grafici.')
+    st.caption('Nessun aggiornamento automatico. Premi “Aggiorna risultati” o ricarica la pagina per vedere i nuovi dati.')
     st.subheader('ℹ️ Come funziona')
     st.write('Ogni studente può inserire **un voto per lezione usando lo stesso codice personale**.')
     st.write('Tutti i dati appartengono all’anno 2026/2027. Ogni lezione inserita si vota una sola volta, indipendentemente dalla durata.')
     st.info(f'Le medie diventano visibili dopo almeno {MIN_VOTES} voti per professore.')
     st.caption('App della classe. Conserva il tuo codice e non condividerlo. Per assistenza rivolgiti all’amministratore.')
 
-@st.fragment(run_every='15s')
+@st.fragment
 def show_top_three():
     leaders = [r for r in db.teacher_stats() if r['total_votes'] >= MIN_VOTES]
     st.markdown('#### 🏆 Top 3 professori')
@@ -84,7 +86,7 @@ with vote_tab:
 
 **Cosa significano i numeri?** 1 è la valutazione più bassa, 5 la più alta. Valuta l’esperienza della lezione a cui hai partecipato.
 
-**Dove vedo i risultati?** In **Classifica** trovi la media dei voti di ogni professore e la fascia da S (più alta) a D. La media appare dopo almeno **3 voti per professore**. In **Andamento** scegli un professore per vedere le medie delle singole lezioni: ogni punto richiede almeno **3 voti su quella lezione**. I risultati si aggiornano ogni **15 secondi**; la durata della lezione non dà più peso al voto.
+**Dove vedo i risultati?** In **Classifica** trovi la media dei voti di ogni professore e la fascia da S (più alta) a D. La media appare dopo almeno **3 voti per professore**. In **Andamento** scegli un professore per vedere le medie delle singole lezioni: ogni punto richiede almeno **3 voti su quella lezione**. I risultati si aggiornano ricaricando la pagina o premendo **“Aggiorna risultati”** nella barra laterale; la durata della lezione non dà più peso al voto.
 
 **Il voto è collegato alle mie iniziali?** Il registro della partecipazione tiene traccia delle lezioni già votate dal tuo codice. Le valutazioni sono conservate separatamente, senza codice o iniziali. Questa separazione protegge la riservatezza, ma non garantisce un anonimato assoluto.
 
@@ -129,7 +131,7 @@ with vote_tab:
     st.caption('La partecipazione viene registrata separatamente dalla valutazione.')
 
 
-@st.fragment(run_every='15s')
+@st.fragment
 def show_leaderboard():
     stats = db.teacher_stats()
     if not stats:
@@ -165,7 +167,7 @@ def show_leaderboard():
         for r in pending:
             st.write(f"• {r['name']} — {r['subject']}: {r['total_votes']}/{MIN_VOTES} voti")
 
-    st.caption('Tier: S ≥ 4,5 · A ≥ 4,0 · B ≥ 3,0 · C ≥ 2,0 · D < 2,0. Media arrotondata a 2 decimali; a parità di soglia si assegna il tier superiore. Aggiornamento automatico ogni 15 secondi.')
+    st.caption('Tier: S ≥ 4,5 · A ≥ 4,0 · B ≥ 3,0 · C ≥ 2,0 · D < 2,0. Media arrotondata a 2 decimali; a parità di soglia si assegna il tier superiore. Per aggiornare i risultati, premi “Aggiorna risultati” nella barra laterale o ricarica la pagina.')
 
 
 with leaderboard_tab:
@@ -173,7 +175,7 @@ with leaderboard_tab:
     show_leaderboard()
 
 
-@st.fragment(run_every='15s')
+@st.fragment
 def show_history():
     teachers = db.list_teachers()
     if not teachers:
@@ -302,7 +304,7 @@ def show_history():
         ],
         'config': {'view': {'stroke': None}, 'axis': {'gridOpacity': 0.15, 'domain': False, 'tickSize': 0}},
     }, width='stretch')
-    st.caption(f'Ogni punto rappresenta una lezione con almeno {MIN_VOTES} voti, in ordine cronologico. Passa sui punti per i dettagli. La media riepilogativa pesa ogni voto allo stesso modo e include solo le lezioni visibili. Aggiornamento ogni 15 secondi.')
+    st.caption(f'Ogni punto rappresenta una lezione con almeno {MIN_VOTES} voti, in ordine cronologico. Passa sui punti per i dettagli. La media riepilogativa pesa ogni voto allo stesso modo e include solo le lezioni visibili. Per aggiornare i risultati, premi “Aggiorna risultati” nella barra laterale o ricarica la pagina.')
     if len(frame) == 1:
         st.info('Per questa materia è disponibile una sola lezione con il minimo di voti: al momento viene mostrato un solo punto.')
     with st.expander('Dettaglio delle lezioni'):
