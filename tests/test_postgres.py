@@ -81,6 +81,25 @@ class PostgresTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             db.init_db()
 
+    def test_runtime_role_can_vote_but_cannot_change_roster_or_delete(self):
+        import psycopg
+        with postgres.connect() as con:
+            digest = db.code_digest(con, '1234')
+            con.execute(f'SET LOCAL ROLE "{self.role}"')
+            con.execute('INSERT INTO participation VALUES (?, ?)', (self.lessons[0]['id'], digest))
+            con.execute('INSERT INTO votes VALUES (?, ?, ?)', ('runtime-test-vote', self.lessons[0]['id'], 4))
+            con.execute('UPDATE lessons SET topic = ?, slot = ? WHERE id = ?', ('Corrected', 5, self.lessons[0]['id']))
+            self.assertEqual(con.execute('SELECT COUNT(*) FROM students').fetchone()[0], 4)
+            for forbidden in [
+                "INSERT INTO students VALUES ('bad', 'bad')",
+                'DELETE FROM votes',
+                'ALTER TABLE votes ADD COLUMN forbidden INTEGER',
+            ]:
+                with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                    with con.raw.transaction():
+                        con.execute(forbidden)
+        self.assertEqual(db.teacher_stats()[0]['total_votes'], 1)
+
     def test_migration_exact_comparison_and_repeat_refusal(self):
         db.add_vote(self.lessons[0]['id'], '0123', 5)
         with postgres.connect() as con:
