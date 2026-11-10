@@ -13,7 +13,16 @@ def setting(name, default=''):
     path = Path(__file__).parent / '.streamlit' / 'secrets.toml'
     if path.exists():
         with path.open('rb') as file:
-            return tomllib.load(file).get(name, default)
+            values = tomllib.load(file)
+        if name in values:
+            return values[name]
+    # Community Cloud manages secrets outside the repository. Accessing st.secrets
+    # also initializes its root-level environment variables on the first read.
+    try:
+        import streamlit as st
+        return st.secrets.get(name, default)
+    except (ImportError, FileNotFoundError):
+        pass
     return default
 
 
