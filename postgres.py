@@ -131,7 +131,7 @@ def connect():
     options.setdefault('connect_timeout', '10')
     # Keep the same transaction boundary in both modes. Never share an active
     # connection between sessions, and never retry writes after a network error.
-    use_pool = str(setting('DATABASE_POOL_ENABLED', '1')).lower() not in ('0', 'false', 'no')
+    use_pool = str(setting('DATABASE_POOL_ENABLED', '1')).strip().lower() not in ('0', 'false', 'no')
     manager = (_get_pool(options).connection() if use_pool
                else psycopg.connect(**options, prepare_threshold=None))
     with manager as raw:

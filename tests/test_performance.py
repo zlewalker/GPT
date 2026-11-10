@@ -42,12 +42,12 @@ class PageLoadingTests(unittest.TestCase):
         self.assertEqual(len(self.app.exception), 0)
 
     def test_initial_page_skips_hidden_charts_and_reads_stats_once(self):
-        with patch.object(db, 'teacher_stats', wraps=db.teacher_stats) as stats, patch.object(db, 'subject_history', wraps=db.subject_history) as history:
+        with patch.object(db, 'teacher_stats', wraps=db.teacher_stats) as stats, patch.object(db, 'subject_history', wraps=db.subject_history) as history, patch.object(st, 'vega_lite_chart', wraps=st.vega_lite_chart) as charts:
             self.app.run()
             self.assertEqual(len(self.app.exception), 0)
             self.assertEqual(stats.call_count, 1)
             self.assertEqual(history.call_count, 0)
-            self.assertEqual(len(self.app.get('arrow_vega_lite_chart')), 0)
+            self.assertEqual(charts.call_count, 0)
             self.assertEqual(len(self.app.dataframe), 0)
             self.select_tab('🏆 Classifica')
             self.assertEqual(stats.call_count, 2)
@@ -56,7 +56,7 @@ class PageLoadingTests(unittest.TestCase):
             self.select_tab('📈 Andamento')
             self.assertEqual(stats.call_count, 3)
             self.assertEqual(history.call_count, 1)
-            self.assertEqual(len(self.app.get('arrow_vega_lite_chart')), 2)
+            self.assertEqual(charts.call_count, 2)
 
     def test_voter_code_survives_tabs_and_vote_refreshes_results(self):
         self.app.run()
