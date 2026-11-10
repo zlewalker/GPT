@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from pathlib import Path
-import os
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -19,7 +18,7 @@ def today_italy():
     return datetime.now(ROME).date()
 
 
-st.set_page_config(page_title='Project Votes', page_icon='🎓', layout='wide')
+st.set_page_config(page_title='Project Votes', page_icon='ðŸŽ“', layout='wide')
 
 @st.cache_resource
 def initialize_database():
@@ -32,56 +31,56 @@ def initialize_database():
 try:
     initialize_database()
 except Exception:
-    st.error('Database non disponibile o migrazione incompleta. Contatta l?amministratore.')
+    st.error("Database non disponibile o migrazione incompleta. Contatta l'amministratore.")
     st.stop()
 
-st.title('🎓 ITS Teacher Tier List')
+st.title('ðŸŽ“ Project Votes')
 st.caption(f'Anno scolastico {db.SCHOOL_YEAR} - Valuta le lezioni e segui la tier list della classe.')
 
 with st.sidebar:
-    st.subheader('ℹ️ Come funziona')
-    st.write('Ogni studente può inserire **un voto per lezione usando lo stesso codice personale**.')
-    st.write('Tutti i dati appartengono all’anno 2026/2027. Ogni lezione inserita si vota una sola volta, indipendentemente dalla durata.')
+    st.subheader('â„¹ï¸ Come funziona')
+    st.write('Ogni studente puÃ² inserire **un voto per lezione usando lo stesso codice personale**.')
+    st.write('Tutti i dati appartengono allâ€™anno 2026/2027. Ogni lezione inserita si vota una sola volta, indipendentemente dalla durata.')
     st.info(f'Le medie diventano visibili dopo almeno {MIN_VOTES} voti per professore.')
-    st.caption('App della classe. Conserva il tuo codice e non condividerlo. Per assistenza rivolgiti all’amministratore.')
+    st.caption('App della classe. Conserva il tuo codice e non condividerlo. Per assistenza rivolgiti allâ€™amministratore.')
 
 vote_tab, leaderboard_tab, trends_tab, admin_tab = st.tabs(
-    ['🗳️ Vota', '🏆 Classifica', '📈 Andamento', '⚙️ Gestione']
+    ['ðŸ—³ï¸ Vota', 'ðŸ† Classifica', 'ðŸ“ˆ Andamento', 'âš™ï¸ Gestione']
 )
 
 def lesson_label(row):
     date_label = datetime.strptime(row['lesson_date'], '%Y-%m-%d').strftime('%d/%m/%Y')
     title = row['topic'] or row['subject']
-    voted = ' - Già votata' if row.get('has_voted') else ''
+    voted = ' - GiÃ  votata' if row.get('has_voted') else ''
     return f"{date_label} - {db.period_label(row['slot'])} - {row['teacher_name']} - {row['subject']} - {title} (#{row['id']}){voted}"
 
 
 with vote_tab:
     st.subheader('Vota le lezioni')
-    st.markdown('Lascia una valutazione delle lezioni a cui hai partecipato e segui la classifica dei professori durante l’anno **2026/2027**.')
+    st.markdown('Lascia una valutazione delle lezioni a cui hai partecipato e segui la classifica dei professori durante lâ€™anno **2026/2027**.')
     st.markdown('''
 1. **Inserisci il codice di 4 cifre** che hai ricevuto privatamente. Scrivi solo i numeri, senza le iniziali. Usa sempre lo stesso codice.
-2. **Scegli la lezione** controllando data, Mattina/Pomeriggio, professore e titolo. Le ultime inserite sono in cima: puoi scorrere il menu o scrivere per cercare quelle più vecchie.
-3. **Scegli un voto da 1 a 5 e premi “Invia il voto”.** Aspetta il messaggio “Voto salvato!”: selezionare il numero da solo non invia la valutazione.
+2. **Scegli la lezione** controllando data, Mattina/Pomeriggio, professore e titolo. Le ultime inserite sono in cima: puoi scorrere il menu o scrivere per cercare quelle piÃ¹ vecchie.
+3. **Scegli un voto da 1 a 5 e premi â€œInvia il votoâ€.** Aspetta il messaggio â€œVoto salvato!â€: selezionare il numero da solo non invia la valutazione.
 ''')
-    st.caption('Il codice serve a registrare soltanto se hai già votato una lezione. Il voto è salvato separatamente, senza codice o iniziali, e nell’app vengono mostrati solo risultati aggregati dopo almeno 3 voti. Questa separazione protegge la tua riservatezza.')
-    st.info('Puoi recuperare anche le lezioni passate: non c’è una scadenza. Ogni lezione accetta un solo voto per codice, anche se dura 4 ore. Dopo l’invio il voto non può essere modificato.')
-    with st.expander('Lezioni già votate, risultati e domande frequenti'):
+    st.caption('Il codice serve a registrare soltanto se hai giÃ  votato una lezione. Il voto Ã¨ salvato separatamente, senza codice o iniziali, e nellâ€™app vengono mostrati solo risultati aggregati dopo almeno 3 voti. Questa separazione protegge la tua riservatezza.')
+    st.info('Puoi recuperare anche le lezioni passate: non câ€™Ã¨ una scadenza. Ogni lezione accetta un solo voto per codice, anche se dura 4 ore. Dopo lâ€™invio il voto non puÃ² essere modificato.')
+    with st.expander('Lezioni giÃ  votate, risultati e domande frequenti'):
         st.markdown('''
-**Perché una lezione scompare?** Dopo il voto viene tolta dall’elenco delle lezioni da valutare. Attiva **“Mostra anche le lezioni già votate”** per ritrovarla: sarà indicata come già votata e non potrai inviare un altro voto. Il voto precedente non viene mostrato.
+**PerchÃ© una lezione scompare?** Dopo il voto viene tolta dallâ€™elenco delle lezioni da valutare. Attiva **â€œMostra anche le lezioni giÃ  votateâ€** per ritrovarla: sarÃ  indicata come giÃ  votata e non potrai inviare un altro voto. Il voto precedente non viene mostrato.
 
-**Cosa significano i numeri?** 1 è la valutazione più bassa, 5 la più alta. Valuta l’esperienza della lezione a cui hai partecipato.
+**Cosa significano i numeri?** 1 Ã¨ la valutazione piÃ¹ bassa, 5 la piÃ¹ alta. Valuta lâ€™esperienza della lezione a cui hai partecipato.
 
-**Dove vedo i risultati?** In **Classifica** trovi la media dei voti di ogni professore e la fascia da S (più alta) a D. La media appare dopo almeno **3 voti per professore**. In **Andamento** scegli un professore per vedere le medie delle singole lezioni: ogni punto richiede almeno **3 voti su quella lezione**. I risultati si aggiornano ogni **15 secondi**; la durata della lezione non dà più peso al voto.
+**Dove vedo i risultati?** In **Classifica** trovi la media dei voti di ogni professore e la fascia da S (piÃ¹ alta) a D. La media appare dopo almeno **3 voti per professore**. In **Andamento** scegli un professore per vedere le medie delle singole lezioni: ogni punto richiede almeno **3 voti su quella lezione**. I risultati si aggiornano ogni **15 secondi**; la durata della lezione non dÃ  piÃ¹ peso al voto.
 
-**Il voto è collegato alle mie iniziali?** Il registro della partecipazione tiene traccia delle lezioni già votate dal tuo codice. Le valutazioni sono conservate separatamente, senza codice o iniziali. Questa separazione protegge la riservatezza, ma non garantisce un anonimato assoluto.
+**Il voto Ã¨ collegato alle mie iniziali?** Il registro della partecipazione tiene traccia delle lezioni giÃ  votate dal tuo codice. Le valutazioni sono conservate separatamente, senza codice o iniziali. Questa separazione protegge la riservatezza, ma non garantisce un anonimato assoluto.
 
-**Il codice non funziona o l’ho perso?** Controlla di avere inserito tutte e quattro le cifre del codice ricevuto. Se il problema resta, chiedi all’amministratore: inventare un nuovo codice non permette di votare.
+**Il codice non funziona o lâ€™ho perso?** Controlla di avere inserito tutte e quattro le cifre del codice ricevuto. Se il problema resta, chiedi allâ€™amministratore: inventare un nuovo codice non permette di votare.
 
-**Non vedo lezioni da votare?** Potresti averle già valutate tutte, oppure non sono ancora state inserite. Controlla l’opzione delle lezioni già votate o segnala la lezione mancante all’amministratore. La scheda **Gestione** è riservata a lui.
+**Non vedo lezioni da votare?** Potresti averle giÃ  valutate tutte, oppure non sono ancora state inserite. Controlla lâ€™opzione delle lezioni giÃ  votate o segnala la lezione mancante allâ€™amministratore. La scheda **Gestione** Ã¨ riservata a lui.
 ''')
     code = st.text_input('Il tuo codice personale (4 cifre)', type='password', max_chars=4, key='voter_code', help='Inserisci soltanto le quattro cifre ricevute, senza le iniziali. Dopo aver scritto, premi Invio o tocca fuori dal campo per caricare le lezioni.')
-    include_voted = st.checkbox('Mostra anche le lezioni già votate', value=False)
+    include_voted = st.checkbox('Mostra anche le lezioni giÃ  votate', value=False)
     if not code:
         st.info('Inserisci il tuo codice per vedere le lezioni ancora da votare.')
     else:
@@ -91,13 +90,13 @@ with vote_tab:
             st.error(str(exc))
         else:
             if not available:
-                st.info('Non ci sono lezioni da votare. Potresti averle già valutate tutte.')
+                st.info('Non ci sono lezioni da votare. Potresti averle giÃ  valutate tutte.')
             else:
                 lookup = {row['id']: row for row in available}
                 selected = st.selectbox('Lezione', options=list(lookup), format_func=lambda lesson_id: lesson_label(lookup[lesson_id]), key='vote_lesson')
                 lesson = lookup[selected]
                 if lesson['has_voted']:
-                    st.info('Hai già votato questa lezione. Il voto non può essere ripetuto.')
+                    st.info('Hai giÃ  votato questa lezione. Il voto non puÃ² essere ripetuto.')
                 else:
                     with st.form('form_vote'):
                         rating = st.radio('Quanto valuti questa lezione?', [1, 2, 3, 4, 5], index=3, horizontal=True)
@@ -108,7 +107,7 @@ with vote_tab:
                         except ValueError as exc:
                             st.error(str(exc))
                         except db.INTEGRITY_ERRORS:
-                            st.warning('Con questo codice hai già votato questa lezione.')
+                            st.warning('Con questo codice hai giÃ  votato questa lezione.')
                         else:
                             st.session_state['vote_saved'] = True
                             st.rerun()
@@ -146,14 +145,14 @@ def show_leaderboard():
         ]
         st.dataframe(pd.DataFrame(rows), hide_index=True, width='stretch')
     else:
-        st.info(f'La classifica apparirà quando almeno un professore avrà {MIN_VOTES} voti.')
+        st.info(f'La classifica apparirÃ  quando almeno un professore avrÃ  {MIN_VOTES} voti.')
 
     if pending:
         st.caption('Ancora fuori classifica (numero minimo di voti non raggiunto):')
         for r in pending:
-            st.write(f"• {r['name']} — {r['subject']}: {r['total_votes']}/{MIN_VOTES} voti")
+            st.write(f"â€¢ {r['name']} â€” {r['subject']}: {r['total_votes']}/{MIN_VOTES} voti")
 
-    st.caption('Tier: S ≥ 4,5 · A ≥ 4,0 · B ≥ 3,0 · C ≥ 2,0 · D < 2,0. Media arrotondata a 2 decimali; a parità di soglia si assegna il tier superiore. Aggiornamento automatico ogni 15 secondi.')
+    st.caption('Tier: S â‰¥ 4,5 Â· A â‰¥ 4,0 Â· B â‰¥ 3,0 Â· C â‰¥ 2,0 Â· D < 2,0. Media arrotondata a 2 decimali; a paritÃ  di soglia si assegna il tier superiore. Aggiornamento automatico ogni 15 secondi.')
 
 
 with leaderboard_tab:
@@ -169,23 +168,23 @@ def show_history():
         return
     choice = st.selectbox(
         'Seleziona il professore', teachers,
-        format_func=lambda row: f"{row['name']} — {row['subject']}",
+        format_func=lambda row: f"{row['name']} â€” {row['subject']}",
         key='history_teacher',
     )
     history = db.teacher_history(choice['id'], MIN_VOTES)
     if not history:
-        st.info(f'Il grafico comparirà quando almeno una lezione avrà {MIN_VOTES} voti.')
+        st.info(f'Il grafico comparirÃ  quando almeno una lezione avrÃ  {MIN_VOTES} voti.')
         return
     frame = pd.DataFrame([
         {'Lezione': f"{r['lesson_date'][5:]} - {db.period_label(r['slot'])} - {r['topic'] or 'Lezione'}", 'Media': r['average_rating']}
         for r in history
     ])
     st.line_chart(frame.set_index('Lezione'), y='Media')
-    st.caption('Ogni punto è la media di una lezione con almeno 3 voti. Lezioni ordinate cronologicamente.')
+    st.caption('Ogni punto Ã¨ la media di una lezione con almeno 3 voti. Lezioni ordinate cronologicamente.')
 
 
 with trends_tab:
-    st.subheader('Andamento nel corso dell’anno')
+    st.subheader('Andamento nel corso dellâ€™anno')
     show_history()
 
 
@@ -193,7 +192,7 @@ with admin_tab:
     st.subheader('Gestione professori e lezioni')
     admin_pin = db.postgres.setting('ADMIN_PIN')
     if not admin_pin:
-        st.warning('Area Gestione disattivata: avvia l’app impostando la variabile d’ambiente ADMIN_PIN (vedi README).')
+        st.warning('Area Gestione disattivata: avvia lâ€™app impostando la variabile dâ€™ambiente ADMIN_PIN (vedi README).')
     else:
         if not st.session_state.get('is_admin', False):
             st.caption('Dopo 5 tentativi errati, i nuovi accessi alla Gestione sono bloccati per 15 minuti, anche ricaricando la pagina.')
@@ -229,7 +228,7 @@ with admin_tab:
                     except ValueError as exc:
                         st.error(str(exc))
                     except db.INTEGRITY_ERRORS:
-                        st.warning('Questo professore con questa materia è già presente.')
+                        st.warning('Questo professore con questa materia Ã¨ giÃ  presente.')
                     else:
                         st.success('Professore aggiunto.')
                         st.rerun()
@@ -240,13 +239,13 @@ with admin_tab:
                     with st.form('add_lesson', clear_on_submit=False):
                         who = st.selectbox(
                             'Professore', options,
-                            format_func=lambda row: f"{row['name']} — {row['subject']}"
+                            format_func=lambda row: f"{row['name']} â€” {row['subject']}"
                         )
                         lesson_date = st.date_input('Data', value=today_italy())
                         period = st.selectbox('Fascia della lezione', ['Mattina', 'Pomeriggio'])
                         slot = 1 if period == 'Mattina' else 5
                         st.caption('Durata fissa: 4 ore.')
-                        st.caption('Inserisci una sola lezione anche se dura più ore: ogni studente esprime un solo voto.')
+                        st.caption('Inserisci una sola lezione anche se dura piÃ¹ ore: ogni studente esprime un solo voto.')
                         topic = st.text_input('Titolo della lezione', max_chars=150)
                         add_class = st.form_submit_button('Aggiungi lezione')
                     if add_class:
@@ -255,7 +254,7 @@ with admin_tab:
                         except ValueError as exc:
                             st.error(str(exc))
                         except db.INTEGRITY_ERRORS:
-                            st.warning('Esiste già una lezione per questo professore, data e fascia.')
+                            st.warning('Esiste giÃ  una lezione per questo professore, data e fascia.')
                         else:
                             st.success('Lezione aggiunta.')
                             st.rerun()
