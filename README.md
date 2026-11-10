@@ -18,7 +18,7 @@ All'avvio, se il CSV è presente, l'app importa le assegnazioni senza duplicarle
 
 ## Regole
 
-- Una sola valutazione da 1 a 5 per codice e lezione, senza scadenza. Inserendo il codice si vedono prima soltanto le lezioni ancora da votare; una casella permette di vedere anche quelle già valutate.
+- Una sola valutazione da 1 a 5 per codice e lezione, senza scadenza. Dopo l’accesso si vedono prima soltanto le lezioni ancora da votare; una casella permette di vedere anche quelle già valutate.
 - Ogni lezione va inserita una sola volta, scegliendo Mattina o Pomeriggio. La durata è fissa a 4 ore e non moltiplica il peso del voto.
 - Tutti i dati appartengono al 2026/2027; la gestione degli anni successivi è rinviata.
 - Media di tutti i voti con uguale peso; arrotondamento a due decimali con mezzi centesimi verso l'alto prima di assegnare il tier.
@@ -44,7 +44,7 @@ Eseguire `.venv\Scripts\python.exe -m unittest discover -s tests -v`.
 
 ## Lavoro residuo
 
-Vedi TODO.md. In particolare: limiti ai tentativi dei codici studente, sostituzione dei codici persi, gestione correzioni delle lezioni, hosting e prove manuali da telefono.
+Vedi TODO.md. In particolare: sostituzione dei codici persi, gestione correzioni delle lezioni, hosting e prove manuali da telefono.
 
 
 ## Menu lezioni e correzioni

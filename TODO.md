@@ -9,7 +9,7 @@ Analisi del 10 novembre 2026. Stack attuale: Python, Streamlit, SQLite. Progetto
 - [x] Verificata la sintassi Python e gli import di Streamlit, pandas e del fuso Europe/Rome.
 - [x] Presenti: inserimento professori/lezioni, voto 1–5, classifica, grafico e gestione con PIN.
 - [x] Vincolo database contro il doppio voto dello stesso codice sulla stessa lezione.
-- [x] Classifica e grafico con aggiornamento ogni 15 secondi.
+- [x] Classifica e grafico con aggiornamento manuale; caricamento delle sole schede aperte.
 
 Verificata con Streamlit AppTest anche la UI: voto valido, doppione e codice errato. Resta la prova manuale da browser e telefono.
 
@@ -20,7 +20,7 @@ Verificata con Streamlit AppTest anche la UI: voto valido, doppione e codice err
 - [ ] Preparare l'elenco riservato iniziali → codice, distinguendo iniziali duplicate.
 - [x] Rimossa la generazione libera dei codici.
 - [x] Accettati soltanto codici autorizzati di quattro cifre, inclusi eventuali zeri iniziali.
-- [ ] Limitare i tentativi errati con un controllo persistente, non aggirabile semplicemente ricaricando la pagina.
+- [x] Accesso studente con token persistente di 30 giorni e revoca al logout; cinque errori nel periodo di 15 minuti bloccano globalmente i nuovi accessi.
 - [ ] Definire sostituzione/revoca dei codici persi preservando la partecipazione già registrata.
 
 ## 2. Separazione tra partecipazione e valutazioni
@@ -43,7 +43,7 @@ La separazione è implementata. Il backup `.before_anonymous.bak` conserva lo sc
 - [x] Media arrotondata a due decimali con mezzi centesimi verso l’alto; il tier usa la stessa media mostrata. Esempio: 4,495 -> 4,50 -> S.
 - [x] Voti senza scadenza per tutte le lezioni non ancora valutate dal codice; filtro opzionale per mostrare le già votate.
 - [x] Confermata visibilità dopo 3 voti: per professore nella classifica, per lezione nel grafico.
-- [x] Confermato aggiornamento ogni 15 secondi dopo la soglia minima, senza attendere la chiusura della votazione.
+- [x] Aggiornamento manuale con pulsante o ricaricamento, dopo la soglia minima.
 - [x] Correzione del titolo della lezione dalla Gestione, senza perdere voti e partecipazioni.
 - [x] Menu lezioni con ricerca e scorrimento, ultime inserite per prime.
 - [x] Fasce Mattina/Pomeriggio e durata fissa di 4 ore, senza selettore di durata.
@@ -73,7 +73,7 @@ La separazione è implementata. Il backup `.before_anonymous.bak` conserva lo sc
 
 ## Prossima attività consigliata
 
-Provare l'app con i codici assegnati; completare limiti ai tentativi dei codici e gestione delle sostituzioni, quindi preparare l'hosting.
+Provare l'app con i codici assegnati; completare la gestione delle sostituzioni dei codici, quindi preparare l'hosting.
 
 Modifica lezioni: in Gestione si possono correggere insieme titolo e fascia Mattina/Pomeriggio, mantenendo voti e partecipazioni. Se la fascia di destinazione contiene una lezione dello stesso professore nella stessa data, la modifica viene rifiutata senza salvare cambiamenti parziali.
 

@@ -51,9 +51,13 @@ with st.sidebar:
     if student_logged_in:
         st.success('Accesso studente attivo')
         if st.button('Esci dall’accesso studente', key='student_logout'):
-            voter_auth.logout(student_token)
-            browser_session.forget()
-            st.rerun()
+            try:
+                voter_auth.logout(student_token)
+            except Exception:
+                st.error('Uscita non completata. Riprova quando il collegamento al database è disponibile.')
+            else:
+                browser_session.forget()
+                st.rerun()
     if storage_ready and not storage_ok:
         st.caption('Questo browser non permette di ricordare l’accesso. La sessione resta valida finché questa pagina rimane aperta. Per ricordarla usa HTTPS e abilita la memoria del sito.')
     st.subheader('ℹ️ Come funziona')
