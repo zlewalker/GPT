@@ -106,7 +106,13 @@ def main():
                         for radio in radios.all():
                             box = assert_fits(page, radio, 'rating choice')
                             assert box['width'] >= 43 and box['height'] >= 44, box
-                    page.get_by_role('radio', name='5', exact=True).check()
+                    # Native inputs are visually hidden by React Aria; people tap the label.
+                    five = radios.filter(has=page.get_by_role('radio', name='5', exact=True))
+                    if width <= 640:
+                        five.tap()
+                    else:
+                        five.click()
+                    expect(page.get_by_role('radio', name='5', exact=True)).to_be_checked()
                     page.screenshot(path=str(output / f'{label}-vote.png'), full_page=True)
                     page.get_by_role('button', name='Invia il voto', exact=True).click()
                     expect(page.get_by_text('Voto salvato! Grazie.', exact=True)).to_be_visible()
