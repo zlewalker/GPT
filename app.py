@@ -1,6 +1,7 @@
 """Launch with: python -m streamlit run app.py"""
 
 from datetime import datetime
+from html import escape
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -9,6 +10,7 @@ import streamlit as st
 
 import database as db
 import browser_session
+import mobile_ui
 import voter_auth
 from rules import tier_for, rounded_score
 
@@ -20,7 +22,7 @@ def today_italy():
     return datetime.now(ROME).date()
 
 
-st.set_page_config(page_title='Project Votes', page_icon='🎓', layout='wide')
+st.set_page_config(page_title='Project Votes', page_icon='🎓', layout='wide', initial_sidebar_state='collapsed')
 
 @st.cache_resource
 def initialize_database():
@@ -42,49 +44,57 @@ if student_token and not student_logged_in:
     browser_session.forget()
     st.rerun()
 
+mobile_ui.apply_layout(student_logged_in, storage_ready)
+
 st.title('🎓 Project Votes')
 st.caption(f'Anno scolastico {db.SCHOOL_YEAR} - Valuta le lezioni e segui la tier list della classe.')
 
-with st.sidebar:
-    st.button('🔄 Aggiorna risultati', key='refresh_results', help='Ricarica i dati di Top 3, classifica e grafici.')
-    st.caption('Nessun aggiornamento automatico. Premi “Aggiorna risultati” o ricarica la pagina per vedere i nuovi dati.')
+with st.container(key='page_actions'):
+    action_columns = st.columns(2 if student_logged_in else 1)
+    with action_columns[0]:
+        st.button('🔄 Aggiorna risultati', key='refresh_results', width='stretch',
+                  help='Carica i nuovi voti e aggiorna i risultati.')
     if student_logged_in:
-        st.success('Accesso studente attivo')
-        if st.button('Esci dall’accesso studente', key='student_logout'):
-            try:
-                voter_auth.logout(student_token)
-            except Exception:
-                st.error('Uscita non completata. Riprova quando il collegamento al database è disponibile.')
-            else:
-                browser_session.forget()
-                st.rerun()
-    if storage_ready and not storage_ok:
-        st.caption('Questo browser non permette di ricordare l’accesso. La sessione resta valida finché questa pagina rimane aperta. Per ricordarla usa HTTPS e abilita la memoria del sito.')
+        with action_columns[1]:
+            if st.button('Esci', key='student_logout', width='stretch',
+                         help='Termina l’accesso studente su questo browser.'):
+                try:
+                    voter_auth.logout(student_token)
+                except Exception:
+                    st.error('Uscita non completata. Riprova quando il collegamento al database è disponibile.')
+                else:
+                    browser_session.forget()
+                    st.rerun()
+if storage_ready and not storage_ok:
+    st.caption('Questo browser non permette di ricordare l’accesso. La sessione resta valida finché questa pagina rimane aperta. Per ricordarla usa HTTPS e abilita la memoria del sito.')
+
+with st.sidebar:
     st.subheader('ℹ️ Come funziona')
     st.write('Ogni studente può inserire **un voto per lezione usando lo stesso codice personale**.')
     st.write('Tutti i dati appartengono all’anno 2026/2027. Ogni lezione inserita si vota una sola volta, indipendentemente dalla durata.')
     st.info(f'Le medie diventano visibili dopo almeno {MIN_VOTES} voti per professore.')
-    st.caption('App della classe. Conserva il tuo codice e non condividerlo. Per assistenza rivolgiti all’amministratore.')
+    st.caption('Conserva il tuo codice e non condividerlo. Aggiorna i risultati con il pulsante nella pagina; non ci sono aggiornamenti periodici.')
+
 
 @st.fragment
 def show_top_three(stats):
     leaders = [r for r in stats if r['total_votes'] >= MIN_VOTES]
-    st.markdown('#### 🏆 Top 3 professori')
     if not leaders:
         st.caption(f'In attesa di almeno {MIN_VOTES} voti per professore.')
         return
     for position, teacher in enumerate(leaders[:3], start=1):
-        st.text(f"{position}. {teacher['name']} · {teacher['subject']} — {rounded_score(teacher['average_rating']):.2f}/5")
+        st.write(f"{position}. {teacher['name']} · {teacher['subject']} — {rounded_score(teacher['average_rating']):.2f}/5")
 
 
 # One fresh read per full page run, shared by all result sections.
 # No cross-user data cache: refresh and successful writes see current results.
 stats = db.teacher_stats()
-show_top_three(stats)
+with st.expander('🏆 Top 3 professori'):
+    show_top_three(stats)
 
 
 vote_tab, leaderboard_tab, trends_tab, admin_tab = st.tabs(
-    ['🗳️ Vota', '🏆 Classifica', '📈 Andamento', '⚙️ Gestione'],
+    ['🗳️ Vota', '🏆 Classifica', '📈 Grafici', '⚙️ Gestione'],
     key='active_tab', on_change='rerun',
 )
 
@@ -98,36 +108,14 @@ def lesson_label(row):
 with vote_tab:
     if vote_tab.open:
         st.subheader('Vota le lezioni')
-        st.markdown('Lascia una valutazione delle lezioni a cui hai partecipato e segui la classifica dei professori durante l’anno **2026/2027**.')
-        st.markdown('''
-    1. **Accedi con il codice di 4 cifre** che hai ricevuto privatamente. Il sito può ricordare l’accesso su questo browser per 30 giorni; sui dispositivi condivisi premi “Esci dall’accesso studente” quando hai finito.
-    2. **Scegli la lezione** controllando data, Mattina/Pomeriggio, professore e titolo. Le ultime inserite sono in cima: puoi scorrere il menu o scrivere per cercare quelle più vecchie.
-    3. **Scegli un voto da 1 a 5 e premi “Invia il voto”.** Aspetta il messaggio “Voto salvato!”: selezionare il numero da solo non invia la valutazione.
-    ''')
-        st.caption('Il codice serve a registrare soltanto se hai già votato una lezione. Il voto è salvato separatamente, senza codice o iniziali, e nell’app vengono mostrati solo risultati aggregati dopo almeno 3 voti. Questa separazione protegge la tua riservatezza.')
-        st.info('Puoi recuperare anche le lezioni passate: non c’è una scadenza. Ogni lezione accetta un solo voto per codice, anche se dura 4 ore. Dopo l’invio il voto non può essere modificato.')
-        with st.expander('Lezioni già votate, risultati e domande frequenti'):
-            st.markdown('''
-    **Perché una lezione scompare?** Dopo il voto viene tolta dall’elenco delle lezioni da valutare. Attiva **“Mostra anche le lezioni già votate”** per ritrovarla: sarà indicata come già votata e non potrai inviare un altro voto. Il voto precedente non viene mostrato.
-
-    **Cosa significano i numeri?** 1 è la valutazione più bassa, 5 la più alta. Valuta l’esperienza della lezione a cui hai partecipato.
-
-    **Dove vedo i risultati?** In **Classifica** trovi la media dei voti di ogni professore e la fascia da S (più alta) a D. La media appare dopo almeno **3 voti per professore**. In **Andamento** scegli un professore per vedere le medie delle singole lezioni: ogni punto richiede almeno **3 voti su quella lezione**. I risultati si aggiornano ricaricando la pagina o premendo **“Aggiorna risultati”** nella barra laterale; la durata della lezione non dà più peso al voto.
-
-    **Il voto è collegato alle mie iniziali?** Il registro della partecipazione tiene traccia delle lezioni già votate dal tuo codice. Le valutazioni sono conservate separatamente, senza codice o iniziali. Questa separazione protegge la riservatezza, ma non garantisce un anonimato assoluto.
-
-    **Il codice non funziona o l’ho perso?** Controlla di avere inserito tutte e quattro le cifre del codice ricevuto. Se il problema resta, chiedi all’amministratore: inventare un nuovo codice non permette di votare.
-
-    **Non vedo lezioni da votare?** Potresti averle già valutate tutte, oppure non sono ancora state inserite. Controlla l’opzione delle lezioni già votate o segnala la lezione mancante all’amministratore. La scheda **Gestione** è riservata a lui.
-    ''')
+        st.caption('Scegli una lezione, valuta da 1 a 5 e conferma l’invio. Puoi votare anche le lezioni passate.')
         if not storage_ready:
             st.info('Recupero dell’accesso su questo browser…')
         elif not student_logged_in:
-            st.markdown('#### Accedi per votare')
             st.caption('Il tuo accesso dura fino a 30 giorni su questo browser. Esci sempre dai dispositivi condivisi.')
             with st.form('student_login', clear_on_submit=True):
-                code = st.text_input('Il tuo codice personale (4 cifre)', type='password', max_chars=4, key='login_code')
-                login_student = st.form_submit_button('Accedi per votare', type='primary')
+                code = st.text_input('Il tuo codice personale (4 cifre)', type='password', max_chars=4, key='login_code', autocomplete='off', placeholder='Le tue 4 cifre')
+                login_student = st.form_submit_button('Accedi per votare', type='primary', width='stretch')
             if login_student:
                 try:
                     token, expires_at, retry_seconds = voter_auth.login(code)
@@ -142,6 +130,7 @@ with vote_tab:
                     else:
                         st.error('Codice non valido. Usa le quattro cifre ricevute privatamente.')
         else:
+            st.caption('Accesso studente attivo')
             include_voted = st.checkbox('Mostra anche le lezioni già votate', value=False)
             try:
                 available = voter_auth.list_lessons(student_token, include_voted)
@@ -154,12 +143,20 @@ with vote_tab:
                     lookup = {row['id']: row for row in available}
                     selected = st.selectbox('Lezione', options=list(lookup), format_func=lambda lesson_id: lesson_label(lookup[lesson_id]), key='vote_lesson')
                     lesson = lookup[selected]
+                    st.html(
+                        '<article class="pv-lesson" aria-label="Riepilogo della lezione">'
+                        f'<div class="pv-lesson-meta">{escape(datetime.strptime(lesson["lesson_date"], "%Y-%m-%d").strftime("%d/%m/%Y"))} · {escape(db.period_label(lesson["slot"]))}</div>'
+                        f'<div class="pv-lesson-title">{escape(lesson["topic"] or lesson["subject"])}</div>'
+                        f'<div class="pv-lesson-meta">{escape(lesson["teacher_name"])} · {escape(lesson["subject"])}</div>'
+                        '</article>'
+                    )
                     if lesson['has_voted']:
                         st.info('Hai già votato questa lezione. Il voto non può essere ripetuto.')
                     else:
                         with st.form('form_vote'):
                             rating = st.radio('Quanto valuti questa lezione?', [1, 2, 3, 4, 5], index=3, horizontal=True)
-                            submitted = st.form_submit_button('Invia il voto', type='primary')
+                            st.caption('1 = valutazione più bassa · 5 = valutazione più alta')
+                            submitted = st.form_submit_button('Invia il voto', type='primary', width='stretch')
                         if submitted:
                             try:
                                 voter_auth.add_vote(selected, student_token, rating)
@@ -173,6 +170,28 @@ with vote_tab:
         if st.session_state.pop('vote_saved', False):
             st.success('Voto salvato! Grazie.')
         st.caption('La partecipazione viene registrata separatamente dalla valutazione.')
+        with st.expander('Come votare, regole e riservatezza'):
+            st.markdown('''
+        1. **Accedi con il codice di 4 cifre** che hai ricevuto privatamente. Il sito può ricordare l’accesso su questo browser per 30 giorni; sui dispositivi condivisi premi “Esci” quando hai finito.
+        2. **Scegli la lezione** controllando data, Mattina/Pomeriggio, professore e titolo. Le ultime inserite sono in cima: puoi scorrere il menu o scrivere per cercare quelle più vecchie.
+        3. **Scegli un voto da 1 a 5 e premi “Invia il voto”.** Aspetta il messaggio “Voto salvato!”: selezionare il numero da solo non invia la valutazione.
+        ''')
+            st.caption('Il codice serve a registrare soltanto se hai già votato una lezione. Il voto è salvato separatamente, senza codice o iniziali, e nell’app vengono mostrati solo risultati aggregati dopo almeno 3 voti. Questa separazione protegge la tua riservatezza.')
+            st.info('Puoi recuperare anche le lezioni passate: non c’è una scadenza. Ogni lezione accetta un solo voto per codice, anche se dura 4 ore. Dopo l’invio il voto non può essere modificato.')
+            st.markdown('''
+    **Perché una lezione scompare?** Dopo il voto viene tolta dall’elenco delle lezioni da valutare. Attiva **“Mostra anche le lezioni già votate”** per ritrovarla: sarà indicata come già votata e non potrai inviare un altro voto. Il voto precedente non viene mostrato.
+    
+    **Cosa significano i numeri?** 1 è la valutazione più bassa, 5 la più alta. Valuta l’esperienza della lezione a cui hai partecipato.
+    
+    **Dove vedo i risultati?** In **Classifica** trovi la media dei voti di ogni professore e la fascia da S (più alta) a D. La media appare dopo almeno **3 voti per professore**. In **Grafici** scegli una materia per vedere le medie delle singole lezioni: ogni punto richiede almeno **3 voti su quella lezione**. I risultati si aggiornano ricaricando la pagina o premendo **“Aggiorna risultati”** in alto nella pagina; la durata della lezione non dà più peso al voto.
+    
+    **Il voto è collegato alle mie iniziali?** Il registro della partecipazione tiene traccia delle lezioni già votate dal tuo codice. Le valutazioni sono conservate separatamente, senza codice o iniziali. Questa separazione protegge la riservatezza, ma non garantisce un anonimato assoluto.
+    
+    **Il codice non funziona o l’ho perso?** Controlla di avere inserito tutte e quattro le cifre del codice ricevuto. Se il problema resta, chiedi all’amministratore: inventare un nuovo codice non permette di votare.
+    
+    **Non vedo lezioni da votare?** Potresti averle già valutate tutte, oppure non sono ancora state inserite. Controlla l’opzione delle lezioni già votate o segnala la lezione mancante all’amministratore. La scheda **Gestione** è riservata a lui.
+    ''')
+
 
 
 @st.fragment
@@ -184,10 +203,11 @@ def show_leaderboard(stats):
     active = [r for r in stats if r['total_votes'] >= MIN_VOTES]
     pending = [r for r in stats if r['total_votes'] < MIN_VOTES]
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric('Professori registrati', len(stats))
-    c2.metric('Voti totali', sum(r['total_votes'] for r in stats))
-    c3.metric('Professori in classifica', len(active))
+    with st.container(key='ranking_metrics'):
+        c1, c2, c3 = st.columns(3)
+        c1.metric('Professori registrati', len(stats))
+        c2.metric('Voti totali', sum(r['total_votes'] for r in stats))
+        c3.metric('Professori in classifica', len(active))
 
     if active:
         rows = [
@@ -201,7 +221,18 @@ def show_leaderboard(stats):
             }
             for r in active
         ]
-        st.dataframe(pd.DataFrame(rows), hide_index=True, width='stretch')
+        with st.container(key='ranking_table'):
+            st.dataframe(pd.DataFrame(rows), hide_index=True, width='stretch')
+        cards = [
+            '<article class="pv-rank-card">'
+            f'<div class="pv-rank-heading"><span class="pv-tier">{escape(row["Tier"])}</span>'
+            f'<div><div class="pv-rank-name">{position}. {escape(row["Professore"])}</div>'
+            f'<div class="pv-rank-meta">{escape(row["Materia"])}</div></div></div>'
+            f'<div class="pv-rank-meta"><strong>{row["Media / 5"]:.2f}/5</strong> · {row["Voti"]} voti · {row["Lezioni votate"]} lezioni votate</div>'
+            '</article>'
+            for position, row in enumerate(rows, start=1)
+        ]
+        st.html('<section class="mobile-rankings" aria-label="Classifica dei professori">' + ''.join(cards) + '</section>')
     else:
         st.info(f'La classifica apparirà quando almeno un professore avrà {MIN_VOTES} voti.')
 
@@ -243,7 +274,7 @@ def show_history(stats):
             'height': max(220, len(stats) * 45),
             'mark': {'type': 'bar', 'cornerRadius': 3},
             'encoding': {
-                'y': {'field': 'Professore', 'type': 'nominal', 'sort': distribution['Professore'].drop_duplicates().tolist(), 'axis': {'title': None, 'labelLimit': 240}},
+                'y': {'field': 'Professore', 'type': 'nominal', 'sort': distribution['Professore'].drop_duplicates().tolist(), 'axis': {'title': None, 'labelLimit': {'expr': 'max(65, min(180, width * 0.4))'}}},
                 'x': {'field': 'Percentuale', 'type': 'quantitative', 'stack': 'zero', 'scale': {'domain': [0, 1]}, 'axis': {'title': 'Distribuzione dei voti ricevuti', 'format': '.0%'}},
                 'color': {'field': 'Valutazione', 'type': 'nominal', 'scale': {'domain': ['1', '2', '3', '4', '5'], 'range': ['#f43f5e', '#f59e0b', '#a78bfa', '#3b82f6', '#14b8a6']}, 'legend': {'title': 'Voto', 'orient': 'top'}},
                 'order': {'field': 'Valutazione', 'type': 'ordinal'},
@@ -256,9 +287,13 @@ def show_history(stats):
                     {'field': 'Media', 'type': 'quantitative', 'format': '.2f'},
                 ],
             },
-            'config': {'view': {'stroke': None}},
+            'config': {'view': {'stroke': None}, 'axis': {'labelFontSize': 12, 'titleFontSize': 12}, 'legend': {'labelFontSize': 12, 'titleFontSize': 12}},
         }, width='stretch')
-        st.caption(f'Ogni barra mostra la percentuale di voti da 1 a 5 ricevuti dal professore, su tutte le sue lezioni. Passa sui colori per vedere i conteggi. Sono inclusi i professori con almeno {MIN_VOTES} voti totali.')
+        st.caption(f'Ogni barra mostra la percentuale di voti da 1 a 5 ricevuti dal professore, su tutte le sue lezioni. Tocca le barre o apri i conteggi per leggere i dettagli. Sono inclusi i professori con almeno {MIN_VOTES} voti totali.')
+        with st.expander('Conteggi dei voti per professore'):
+            for teacher in stats:
+                st.write(f"**{teacher['name']} · {teacher['subject']}**")
+                st.caption(' · '.join(f"{rating}★: {int(teacher[f'rating_{rating}'])}" for rating in range(1, 6)))
     else:
         st.info(f'Il confronto apparirà quando almeno un professore avrà {MIN_VOTES} voti.')
 
@@ -273,6 +308,7 @@ def show_history(stats):
     frame = pd.DataFrame([
         {
             'Ordine': index,
+            'Data breve': f"{datetime.strptime(r['lesson_date'], '%Y-%m-%d'):%d/%m/%y} {'M' if db.period_label(r['slot']) == 'Mattina' else 'P'}",
             'Lezione': f"{datetime.strptime(r['lesson_date'], '%Y-%m-%d'):%d/%m/%Y} · {db.period_label(r['slot'])}",
             'Titolo': r['topic'] or 'Lezione',
             'Professore': r['teacher_name'],
@@ -284,10 +320,11 @@ def show_history(stats):
     ])
     total_votes = int(frame['Voti'].sum())
     average = float((frame['Media'] * frame['Voti']).sum() / total_votes)
-    c1, c2, c3 = st.columns(3)
-    c1.metric('Media delle lezioni visibili', f'{average:.2f} / 5')
-    c2.metric('Lezioni nel grafico', len(frame))
-    c3.metric('Voti nelle lezioni visibili', total_votes)
+    with st.container(key='history_metrics'):
+        c1, c2, c3 = st.columns(3)
+        c1.metric('Media delle lezioni visibili', f'{average:.2f} / 5')
+        c2.metric('Lezioni nel grafico', len(frame))
+        c3.metric('Voti nelle lezioni visibili', total_votes)
 
     tooltip = [
         {'field': 'Professore', 'type': 'nominal'},
@@ -301,8 +338,8 @@ def show_history(stats):
         'height': 360,
         'encoding': {
             'x': {
-                'field': 'Lezione', 'type': 'ordinal', 'sort': frame['Lezione'].tolist(),
-                'axis': {'title': None, 'labelAngle': -35, 'labelOverlap': 'greedy', 'labelLimit': 180},
+                'field': 'Data breve', 'type': 'ordinal', 'sort': frame['Data breve'].drop_duplicates().tolist(),
+                'axis': {'title': None, 'labelAngle': -45, 'labelOverlap': 'greedy', 'labelLimit': 95},
             },
             'y': {
                 'field': 'Media', 'type': 'quantitative',
@@ -324,20 +361,20 @@ def show_history(stats):
                 'encoding': {
                     'color': {
                         'field': 'Professore', 'type': 'nominal',
-                        'legend': {'title': 'Professore', 'orient': 'top', 'direction': 'horizontal'},
+                        'legend': {'title': 'Professore', 'orient': 'bottom', 'direction': 'vertical', 'labelLimit': {'expr': 'max(80, width - 16)'}},
                     },
                     'xOffset': {'field': 'Professore', 'type': 'nominal'},
                     'tooltip': tooltip,
                 },
             },
         ],
-        'config': {'view': {'stroke': None}, 'axis': {'gridOpacity': 0.15, 'domain': False, 'tickSize': 0}},
+        'config': {'view': {'stroke': None}, 'axis': {'gridOpacity': 0.15, 'domain': False, 'tickSize': 0, 'labelFontSize': 12, 'titleFontSize': 12}, 'legend': {'labelFontSize': 12, 'titleFontSize': 12}},
     }, width='stretch')
-    st.caption(f'Ogni punto rappresenta una lezione con almeno {MIN_VOTES} voti, in ordine cronologico. Passa sui punti per i dettagli. La media riepilogativa pesa ogni voto allo stesso modo e include solo le lezioni visibili. Per aggiornare i risultati, premi “Aggiorna risultati” nella barra laterale o ricarica la pagina.')
+    st.caption(f'Ogni punto rappresenta una lezione con almeno {MIN_VOTES} voti, in ordine cronologico. M = mattina, P = pomeriggio. Tocca i punti o apri il dettaglio delle lezioni. La media riepilogativa pesa ogni voto allo stesso modo e include solo le lezioni visibili. Per aggiornare i risultati, premi “Aggiorna risultati” nella barra laterale o ricarica la pagina.')
     if len(frame) == 1:
         st.info('Per questa materia è disponibile una sola lezione con il minimo di voti: al momento viene mostrato un solo punto.')
     with st.expander('Dettaglio delle lezioni'):
-        st.dataframe(frame.drop(columns='Ordine'), hide_index=True, width='stretch', column_config={
+        st.dataframe(frame.drop(columns=['Ordine', 'Data breve']), hide_index=True, width='stretch', column_config={
             'Media': st.column_config.NumberColumn('Media / 5', format='%.2f'),
         })
 

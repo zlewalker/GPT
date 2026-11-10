@@ -27,3 +27,12 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Persistent login in a real browser
         run: python tests/browser_sessions.py
+      - name: Phone and desktop layout checks
+        run: python tests/browser_mobile.py
+      - name: Save responsive screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-screenshots
+          path: mobile-screenshots/
+          retention-days: 7

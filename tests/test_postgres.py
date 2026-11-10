@@ -99,7 +99,7 @@ class PostgresTests(unittest.TestCase):
         app.run()
         self.assertEqual(len(app.exception), 0)
         self.assertGreater(len(app.dataframe), 0)
-        app.session_state['active_tab'] = '📈 Andamento'
+        app.session_state['active_tab'] = '📈 Grafici'
         app.run()
         self.assertEqual(len(app.exception), 0)
         self.assertEqual(next(m.value for m in app.metric if m.label == 'Lezioni nel grafico'), '1')
