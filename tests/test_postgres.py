@@ -126,6 +126,33 @@ class PostgresTests(unittest.TestCase):
         with postgres.connect() as con:
             self.assertFalse(any(migrate.read_rows(con).values()))
 
+    def test_sqlite_transfer_export_and_restore_round_trip(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        source_path = Path(self.temp.name) / 'source.sqlite3'
+        with patch.object(db, 'DB_PATH', source_path), patch.object(postgres, 'enabled', return_value=False):
+            db.init_db()
+            db.import_student_codes(self.roster)
+            db.add_teacher('Source teacher', 'Source subject')
+            db.add_lesson(db.list_teachers()[0]['id'], '2026-11-10', 1, 'Source lesson')
+            db.add_vote(db.list_lessons()[0]['id'], '0123', 5)
+        with postgres.connect() as con:
+            con.execute('TRUNCATE participation, votes, lessons, teachers, students, settings RESTART IDENTITY CASCADE')
+            con.execute("INSERT INTO settings VALUES ('schema_version', '1')")
+        with redirect_stdout(StringIO()):
+            self.assertEqual(migrate.main(['--source', str(source_path), '--apply', '--backup-dir', self.temp.name]), 0)
+            self.assertEqual(migrate.main(['--source', str(source_path), '--verify']), 0)
+            export_dir = Path(self.temp.name) / 'export'
+            self.assertEqual(migrate.main(['--export', '--backup-dir', str(export_dir)]), 0)
+            backup = next(export_dir.glob('*.json'))
+            with postgres.connect() as con:
+                con.execute('TRUNCATE participation, votes, lessons, teachers, students, settings RESTART IDENTITY CASCADE')
+                con.execute("INSERT INTO settings VALUES ('schema_version', '1')")
+            self.assertEqual(migrate.main(['--restore', str(backup), '--backup-dir', self.temp.name]), 0)
+            self.assertEqual(migrate.main(['--source', str(source_path), '--verify']), 0)
+        self.assertEqual(db.list_lessons('0123'), [])
+        self.assertEqual(db.teacher_stats()[0]['average_rating'], 5)
+
 
 # Exercise the same business cases on both backends; SQL-specific tests stay separate.
 for name in dir(original.DatabaseTests):
