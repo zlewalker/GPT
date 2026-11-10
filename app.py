@@ -44,6 +44,19 @@ with st.sidebar:
     st.info(f'Le medie diventano visibili dopo almeno {MIN_VOTES} voti per professore.')
     st.caption('App della classe. Conserva il tuo codice e non condividerlo. Per assistenza rivolgiti all’amministratore.')
 
+@st.fragment(run_every='15s')
+def show_top_three():
+    leaders = [r for r in db.teacher_stats() if r['total_votes'] >= MIN_VOTES]
+    st.markdown('#### 🏆 Top 3 professori')
+    if not leaders:
+        st.caption(f'In attesa di almeno {MIN_VOTES} voti per professore.')
+        return
+    for position, teacher in enumerate(leaders[:3], start=1):
+        st.text(f"{position}. {teacher['name']} · {teacher['subject']} — {rounded_score(teacher['average_rating']):.2f}/5")
+
+
+show_top_three()
+
 vote_tab, leaderboard_tab, trends_tab, admin_tab = st.tabs(
     ['🗳️ Vota', '🏆 Classifica', '📈 Andamento', '⚙️ Gestione']
 )
@@ -267,6 +280,14 @@ def show_history():
             },
         },
         'layer': [
+            {
+                'mark': {'type': 'line', 'strokeWidth': 2.5, 'opacity': 0.8},
+                'encoding': {
+                    'color': {'field': 'Professore', 'type': 'nominal'},
+                    'xOffset': {'field': 'Professore', 'type': 'nominal'},
+                    'order': {'field': 'Ordine', 'type': 'quantitative'},
+                },
+            },
             {
                 'mark': {'type': 'point', 'filled': True, 'size': 110, 'stroke': '#ffffff', 'strokeWidth': 1.5},
                 'encoding': {
