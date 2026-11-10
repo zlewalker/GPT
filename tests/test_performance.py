@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import database as db
+import browser_session
 import streamlit as st
 from streamlit.testing.v1 import AppTest
 
@@ -23,6 +24,11 @@ class PageLoadingTests(unittest.TestCase):
         environment = patch.dict(os.environ, {'ADMIN_PIN': 'test-only-pin'})
         environment.start()
         self.addCleanup(environment.stop)
+        storage = patch.object(browser_session, 'sync', side_effect=lambda: (
+            True, st.session_state.get('_student_token'), True
+        ))
+        storage.start()
+        self.addCleanup(storage.stop)
         st.cache_resource.clear()
         db.init_db()
         roster = Path(self.temp.name) / 'roster.csv'
@@ -60,10 +66,13 @@ class PageLoadingTests(unittest.TestCase):
 
     def test_voter_code_survives_tabs_and_vote_refreshes_results(self):
         self.app.run()
-        self.app.text_input(key='voter_code').input('0123').run()
+        self.app.text_input(key='login_code').input('0123')
+        next(b for b in self.app.button if b.label == 'Accedi per votare').click().run()
+        self.assertEqual(len(self.app.exception), 0)
         self.select_tab('📈 Andamento')
         self.select_tab('🗳️ Vota')
-        self.assertEqual(self.app.text_input(key='voter_code').value, '0123')
+        self.assertGreater(len(self.app.radio), 0)
+        self.assertEqual(len(self.app.text_input), 0)
         self.app.radio[0].set_value(5)
         next(button for button in self.app.button if button.label == 'Invia il voto').click().run()
         self.assertEqual(len(self.app.exception), 0)
@@ -80,6 +89,19 @@ class PageLoadingTests(unittest.TestCase):
         self.assertEqual(len(self.app.exception), 0)
         self.assertEqual(self.app.session_state['active_tab'], '🏆 Classifica')
         self.assertEqual(next(m.value for m in self.app.metric if m.label == 'Voti totali'), '4')
+
+    def test_logout_revokes_server_session(self):
+        import voter_auth
+        self.app.run()
+        self.app.text_input(key='login_code').input('0123')
+        next(b for b in self.app.button if b.label == 'Accedi per votare').click().run()
+        token = self.app.session_state['_student_token']
+        self.assertTrue(voter_auth.is_authenticated(token))
+        self.app.button(key='student_logout').click().run()
+        self.assertEqual(len(self.app.exception), 0)
+        self.assertFalse(voter_auth.is_authenticated(token))
+        self.assertEqual(len(self.app.radio), 0)
+        self.assertEqual(len(self.app.text_input), 1)
 
     def test_admin_still_adds_teacher_on_demand(self):
         self.app.run()

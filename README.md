@@ -62,3 +62,7 @@ Modifica lezioni: in Gestione si possono correggere insieme titolo e fascia Matt
 ## Prestazioni e rollback
 
 Le schede caricano i contenuti solo quando aperte. Statistiche condivise nella singola esecuzione, query unica per materia e pool PostgreSQL riducono il lavoro ripetuto. Per dettagli, verifiche e ripristino della versione precedente vedere [PERFORMANCE.md](PERFORMANCE.md).
+
+## Accesso studente
+
+Accesso con il codice personale esistente e sessione di 30 giorni sul browser, con pulsante “Esci dall’accesso studente”. Dopo cinque accessi errati nel periodo di 15 minuti i nuovi accessi sono temporaneamente bloccati globalmente. Voti e partecipazioni restano separati. Prima del rilascio PostgreSQL applicare [sql/student_sessions.sql](sql/student_sessions.sql). Dettagli, limiti e rollback in [STUDENT_SESSIONS.md](STUDENT_SESSIONS.md).

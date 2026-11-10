@@ -92,6 +92,14 @@ def init_db():
                 PRIMARY KEY (lesson_id, voter_digest)
             );
         """)
+        con.executescript("""
+            CREATE TABLE IF NOT EXISTS student_sessions (
+                token_hash TEXT PRIMARY KEY,
+                voter_digest TEXT NOT NULL REFERENCES students(voter_digest) ON DELETE CASCADE,
+                expires_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS student_sessions_expiry_idx ON student_sessions(expires_at);
+        """)
         vote_columns = {row['name'] for row in con.execute('PRAGMA table_info(votes)')}
         if 'voter_digest' in vote_columns:
             backup_path = DB_PATH.with_name(DB_PATH.name + '.before_anonymous.bak')
@@ -208,18 +216,22 @@ def add_vote(lesson_id, voter_code, rating, current_date=None):
     code = voter_code.strip()
     if len(code) != 4 or not code.isascii() or not code.isdigit():
         raise ValueError('Inserisci il codice personale di 4 cifre ricevuto.')
-    if rating not in (1, 2, 3, 4, 5):
-        raise ValueError('Il voto deve essere compreso tra 1 e 5.')
     with connect() as con:
         begin_write(con)
-        digest = code_digest(con, code)
-        if con.execute('SELECT 1 FROM students WHERE voter_digest = ?', (digest,)).fetchone() is None:
-            raise ValueError('Codice non autorizzato.')
-        lesson = con.execute('SELECT lesson_date FROM lessons WHERE id = ?', (lesson_id,)).fetchone()
-        if lesson is None:
-            raise ValueError('La lezione selezionata non esiste.')
-        con.execute('INSERT INTO participation VALUES (?, ?)', (lesson_id, digest))
-        con.execute('INSERT INTO votes VALUES (?, ?, ?)', (secrets.token_hex(16), lesson_id, int(rating)))
+        _record_vote(con, lesson_id, code_digest(con, code), rating)
+
+
+def _record_vote(con, lesson_id, digest, rating):
+    """Shared transaction body for legacy codes and authenticated sessions."""
+    if rating not in (1, 2, 3, 4, 5):
+        raise ValueError('Il voto deve essere compreso tra 1 e 5.')
+    if con.execute('SELECT 1 FROM students WHERE voter_digest = ?', (digest,)).fetchone() is None:
+        raise ValueError('Codice non autorizzato.')
+    lesson = con.execute('SELECT lesson_date FROM lessons WHERE id = ?', (lesson_id,)).fetchone()
+    if lesson is None:
+        raise ValueError('La lezione selezionata non esiste.')
+    con.execute('INSERT INTO participation VALUES (?, ?)', (lesson_id, digest))
+    con.execute('INSERT INTO votes VALUES (?, ?, ?)', (secrets.token_hex(16), lesson_id, int(rating)))
 
 
 def teacher_stats():
@@ -310,20 +322,23 @@ def list_lessons(voter_code=None, include_voted=False):
             code = voter_code.strip()
             if len(code) != 4 or not code.isascii() or not code.isdigit():
                 raise ValueError('Inserisci il codice personale di 4 cifre ricevuto.')
-            digest = code_digest(con, code)
-            if con.execute('SELECT 1 FROM students WHERE voter_digest = ?', (digest,)).fetchone() is None:
-                raise ValueError('Codice non autorizzato.')
-            rows = _dicts(con.execute("""
-                SELECT l.*, t.name AS teacher_name, t.subject,
-                       EXISTS(SELECT 1 FROM participation p WHERE p.lesson_id=l.id AND p.voter_digest=?) AS has_voted
-                FROM lessons l JOIN teachers t ON t.id=l.teacher_id
-                ORDER BY l.id DESC
-            """, (digest,)))
-            return rows if include_voted else [row for row in rows if not row['has_voted']]
+            return _lessons_for_digest(con, code_digest(con, code), include_voted)
         return _dicts(con.execute("""
             SELECT l.*, t.name AS teacher_name, t.subject
             FROM lessons l JOIN teachers t ON t.id=l.teacher_id ORDER BY l.id DESC
         """))
+
+
+def _lessons_for_digest(con, digest, include_voted=False):
+    if con.execute('SELECT 1 FROM students WHERE voter_digest = ?', (digest,)).fetchone() is None:
+        raise ValueError('Codice non autorizzato.')
+    rows = _dicts(con.execute("""
+        SELECT l.*, t.name AS teacher_name, t.subject,
+               EXISTS(SELECT 1 FROM participation p WHERE p.lesson_id=l.id AND p.voter_digest=?) AS has_voted
+        FROM lessons l JOIN teachers t ON t.id=l.teacher_id
+        ORDER BY l.id DESC
+    """, (digest,)))
+    return rows if include_voted else [row for row in rows if not row['has_voted']]
 
 
 def update_lesson_title(lesson_id, title):
