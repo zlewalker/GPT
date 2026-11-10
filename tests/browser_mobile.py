@@ -97,7 +97,10 @@ def main():
                     lesson = page.get_by_role('article', name='Riepilogo della lezione')
                     expect(lesson).to_contain_text(title)
                     assert_fits(page, lesson, 'full lesson title')
-                    radios = page.locator('[role="radiogroup"] > label')
+                    page.screenshot(path=str(output / f'{label}-vote.png'), full_page=True)
+                    radios = page.locator('label').filter(has=page.locator('input[type="radio"]'))
+                    if radios.count() != 5:
+                        print('Radio structure:', page.get_by_role('radio').first.evaluate('e => e.parentElement.parentElement.outerHTML'))
                     expect(radios).to_have_count(5)
                     if width <= 640:
                         for radio in radios.all():
