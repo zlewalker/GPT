@@ -119,7 +119,12 @@ def init_db():
 
 
 def _dicts(cursor):
-    return [dict(row) for row in cursor.fetchall()]
+    rows = [dict(row) for row in cursor.fetchall()]
+    for row in rows:
+        if row.get('average_rating') is not None:
+            # PostgreSQL AVG(integer) returns Decimal; charts expect plain numbers.
+            row['average_rating'] = float(row['average_rating'])
+    return rows
 
 
 def begin_write(con):

@@ -81,6 +81,17 @@ class PostgresTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             db.init_db()
 
+    def test_streamlit_with_postgres_ranking_and_history(self):
+        from streamlit.testing.v1 import AppTest
+        for code in ['1234', '2345', '3456']:
+            db.add_vote(self.lessons[0]['id'], code, 4)
+        app = AppTest.from_file(str(Path(__file__).parents[1] / 'app.py'), default_timeout=30).run()
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(len(app.tabs), 4)
+        self.assertGreater(len(app.dataframe), 0)
+        app.text_input(key='voter_code').input('0123').run()
+        self.assertEqual(len(app.exception), 0)
+
     def test_runtime_role_can_vote_but_cannot_change_roster_or_delete(self):
         import psycopg
         with postgres.connect() as con:
