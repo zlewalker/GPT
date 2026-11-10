@@ -50,6 +50,16 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]['average_rating'], 4)
 
+    def test_teacher_vote_distribution_includes_all_lessons(self):
+        for code, rating in [('1234', 1), ('2345', 5), ('3456', 5)]:
+            db.add_vote(self.lessons[0]['id'], code, rating)
+        db.add_vote(self.lessons[1]['id'], '1234', 3)
+        db.add_teacher('Senza voti', 'Storia')
+        stats = {r['name']: r for r in db.teacher_stats()}
+        self.assertEqual([stats['Prof. Prova'][f'rating_{i}'] for i in range(1, 6)], [1, 0, 1, 0, 2])
+        self.assertEqual(sum(stats['Prof. Prova'][f'rating_{i}'] for i in range(1, 6)), stats['Prof. Prova']['total_votes'])
+        self.assertEqual([stats['Senza voti'][f'rating_{i}'] for i in range(1, 6)], [0] * 5)
+
     def test_votes_have_no_deadline(self):
         db.add_vote(self.lessons[0]['id'], '1234', 3, '2027-06-30')
         self.assertEqual(db.teacher_stats()[0]['total_votes'], 1)

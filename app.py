@@ -166,21 +166,117 @@ def show_history():
     if not teachers:
         st.info('Aggiungi prima un professore dalla scheda Gestione.')
         return
-    choice = st.selectbox(
-        'Seleziona il professore', teachers,
-        format_func=lambda row: f"{row['name']} — {row['subject']}",
-        key='history_teacher',
-    )
-    history = db.teacher_history(choice['id'], MIN_VOTES)
+    st.markdown('#### Confronto delle votazioni dei professori')
+    stats = [r for r in db.teacher_stats() if r['total_votes'] >= MIN_VOTES]
+    if stats:
+        distribution = pd.DataFrame([
+            {
+                'Professore': f"{r['name']} · {r['subject']}",
+                'Valutazione': str(rating),
+                'Numero di voti': int(r[f'rating_{rating}']),
+                'Percentuale': int(r[f'rating_{rating}']) / int(r['total_votes']),
+                'Voti totali': int(r['total_votes']),
+                'Media': float(r['average_rating']),
+            }
+            for r in stats for rating in range(1, 6)
+        ])
+        st.vega_lite_chart(distribution, {
+            'height': max(220, len(stats) * 45),
+            'mark': {'type': 'bar', 'cornerRadius': 3},
+            'encoding': {
+                'y': {'field': 'Professore', 'type': 'nominal', 'sort': distribution['Professore'].drop_duplicates().tolist(), 'axis': {'title': None, 'labelLimit': 240}},
+                'x': {'field': 'Percentuale', 'type': 'quantitative', 'stack': 'zero', 'scale': {'domain': [0, 1]}, 'axis': {'title': 'Distribuzione dei voti ricevuti', 'format': '.0%'}},
+                'color': {'field': 'Valutazione', 'type': 'nominal', 'scale': {'domain': ['1', '2', '3', '4', '5'], 'range': ['#f43f5e', '#f59e0b', '#a78bfa', '#3b82f6', '#14b8a6']}, 'legend': {'title': 'Voto', 'orient': 'top'}},
+                'order': {'field': 'Valutazione', 'type': 'ordinal'},
+                'tooltip': [
+                    {'field': 'Professore', 'type': 'nominal'},
+                    {'field': 'Valutazione', 'type': 'nominal', 'title': 'Voto'},
+                    {'field': 'Numero di voti', 'type': 'quantitative'},
+                    {'field': 'Percentuale', 'type': 'quantitative', 'format': '.1%'},
+                    {'field': 'Voti totali', 'type': 'quantitative'},
+                    {'field': 'Media', 'type': 'quantitative', 'format': '.2f'},
+                ],
+            },
+            'config': {'view': {'stroke': None}},
+        }, width='stretch')
+        st.caption(f'Ogni barra mostra la percentuale di voti da 1 a 5 ricevuti dal professore, su tutte le sue lezioni. Passa sui colori per vedere i conteggi. Sono inclusi i professori con almeno {MIN_VOTES} voti totali.')
+    else:
+        st.info(f'Il confronto apparirà quando almeno un professore avrà {MIN_VOTES} voti.')
+
+    st.divider()
+    st.markdown('#### Medie delle singole lezioni per materia')
+    subject = st.selectbox('Seleziona la materia', sorted({r['subject'] for r in teachers}), key='history_subject')
+    history = [
+        dict(lesson, teacher_name=teacher['name'])
+        for teacher in teachers if teacher['subject'] == subject
+        for lesson in db.teacher_history(teacher['id'], MIN_VOTES)
+    ]
+    history.sort(key=lambda r: (r['lesson_date'], r['slot'], r['teacher_name']))
     if not history:
         st.info(f'Il grafico comparirà quando almeno una lezione avrà {MIN_VOTES} voti.')
         return
     frame = pd.DataFrame([
-        {'Lezione': f"{r['lesson_date'][5:]} - {db.period_label(r['slot'])} - {r['topic'] or 'Lezione'}", 'Media': r['average_rating']}
-        for r in history
+        {
+            'Ordine': index,
+            'Lezione': f"{datetime.strptime(r['lesson_date'], '%Y-%m-%d'):%d/%m/%Y} · {db.period_label(r['slot'])}",
+            'Titolo': r['topic'] or 'Lezione',
+            'Professore': r['teacher_name'],
+            'Media': float(r['average_rating']),
+            'Voti': int(r['total_votes']),
+            'Tier': tier_for(r['average_rating']),
+        }
+        for index, r in enumerate(history)
     ])
-    st.line_chart(frame.set_index('Lezione'), y='Media')
-    st.caption('Ogni punto è la media di una lezione con almeno 3 voti. Lezioni ordinate cronologicamente.')
+    total_votes = int(frame['Voti'].sum())
+    average = float((frame['Media'] * frame['Voti']).sum() / total_votes)
+    c1, c2, c3 = st.columns(3)
+    c1.metric('Media delle lezioni visibili', f'{average:.2f} / 5')
+    c2.metric('Lezioni nel grafico', len(frame))
+    c3.metric('Voti nelle lezioni visibili', total_votes)
+
+    tooltip = [
+        {'field': 'Professore', 'type': 'nominal'},
+        {'field': 'Lezione', 'type': 'nominal', 'title': 'Data e fascia'},
+        {'field': 'Titolo', 'type': 'nominal', 'title': 'Lezione'},
+        {'field': 'Media', 'type': 'quantitative', 'format': '.2f', 'title': 'Media / 5'},
+        {'field': 'Voti', 'type': 'quantitative', 'title': 'Voti ricevuti'},
+        {'field': 'Tier', 'type': 'nominal'},
+    ]
+    st.vega_lite_chart(frame, {
+        'height': 360,
+        'encoding': {
+            'x': {
+                'field': 'Lezione', 'type': 'ordinal', 'sort': frame['Lezione'].tolist(),
+                'axis': {'title': None, 'labelAngle': -35, 'labelOverlap': 'greedy', 'labelLimit': 180},
+            },
+            'y': {
+                'field': 'Media', 'type': 'quantitative',
+                'scale': {'domain': [1, 5], 'zero': False},
+                'axis': {'title': 'Valutazione media', 'values': [1, 2, 3, 4, 5]},
+            },
+        },
+        'layer': [
+            {
+                'mark': {'type': 'point', 'filled': True, 'size': 110, 'stroke': '#ffffff', 'strokeWidth': 1.5},
+                'encoding': {
+                    'color': {
+                        'field': 'Professore', 'type': 'nominal',
+                        'legend': {'title': 'Professore', 'orient': 'top', 'direction': 'horizontal'},
+                    },
+                    'xOffset': {'field': 'Professore', 'type': 'nominal'},
+                    'tooltip': tooltip,
+                },
+            },
+        ],
+        'config': {'view': {'stroke': None}, 'axis': {'gridOpacity': 0.15, 'domain': False, 'tickSize': 0}},
+    }, width='stretch')
+    st.caption(f'Ogni punto rappresenta una lezione con almeno {MIN_VOTES} voti, in ordine cronologico. Passa sui punti per i dettagli. La media riepilogativa pesa ogni voto allo stesso modo e include solo le lezioni visibili. Aggiornamento ogni 15 secondi.')
+    if len(frame) == 1:
+        st.info('Per questa materia è disponibile una sola lezione con il minimo di voti: al momento viene mostrato un solo punto.')
+    with st.expander('Dettaglio delle lezioni'):
+        st.dataframe(frame.drop(columns='Ordine'), hide_index=True, width='stretch', column_config={
+            'Media': st.column_config.NumberColumn('Media / 5', format='%.2f'),
+        })
 
 
 with trends_tab:

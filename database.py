@@ -228,6 +228,11 @@ def teacher_stats():
             SELECT t.id, t.name, t.subject,
                    COUNT(v.id) AS total_votes,
                    COUNT(DISTINCT CASE WHEN v.id IS NOT NULL THEN l.id END) AS rated_lessons,
+                   SUM(CASE WHEN v.rating = 1 THEN 1 ELSE 0 END) AS rating_1,
+                   SUM(CASE WHEN v.rating = 2 THEN 1 ELSE 0 END) AS rating_2,
+                   SUM(CASE WHEN v.rating = 3 THEN 1 ELSE 0 END) AS rating_3,
+                   SUM(CASE WHEN v.rating = 4 THEN 1 ELSE 0 END) AS rating_4,
+                   SUM(CASE WHEN v.rating = 5 THEN 1 ELSE 0 END) AS rating_5,
                    AVG(v.rating) AS average_rating
             FROM teachers t
             LEFT JOIN lessons l ON l.teacher_id = t.id
