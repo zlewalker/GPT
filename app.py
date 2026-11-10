@@ -8,6 +8,8 @@ import pandas as pd
 import streamlit as st
 
 import database as db
+import browser_session
+import voter_auth
 from rules import tier_for, rounded_score
 
 MIN_VOTES = 3
@@ -34,12 +36,30 @@ except Exception:
     st.error("Database non disponibile o migrazione incompleta. Contatta l'amministratore.")
     st.stop()
 
+storage_ready, student_token, storage_ok = browser_session.sync()
+student_logged_in = voter_auth.is_authenticated(student_token)
+if student_token and not student_logged_in:
+    browser_session.forget()
+    st.rerun()
+
 st.title('🎓 Project Votes')
 st.caption(f'Anno scolastico {db.SCHOOL_YEAR} - Valuta le lezioni e segui la tier list della classe.')
 
 with st.sidebar:
     st.button('🔄 Aggiorna risultati', key='refresh_results', help='Ricarica i dati di Top 3, classifica e grafici.')
     st.caption('Nessun aggiornamento automatico. Premi “Aggiorna risultati” o ricarica la pagina per vedere i nuovi dati.')
+    if student_logged_in:
+        st.success('Accesso studente attivo')
+        if st.button('Esci dall’accesso studente', key='student_logout'):
+            try:
+                voter_auth.logout(student_token)
+            except Exception:
+                st.error('Uscita non completata. Riprova quando il collegamento al database è disponibile.')
+            else:
+                browser_session.forget()
+                st.rerun()
+    if storage_ready and not storage_ok:
+        st.caption('Questo browser non permette di ricordare l’accesso. La sessione resta valida finché questa pagina rimane aperta. Per ricordarla usa HTTPS e abilita la memoria del sito.')
     st.subheader('ℹ️ Come funziona')
     st.write('Ogni studente può inserire **un voto per lezione usando lo stesso codice personale**.')
     st.write('Tutti i dati appartengono all’anno 2026/2027. Ogni lezione inserita si vota una sola volta, indipendentemente dalla durata.')
@@ -63,10 +83,6 @@ stats = db.teacher_stats()
 show_top_three(stats)
 
 
-def remember_voter_code():
-    st.session_state['saved_voter_code'] = st.session_state['voter_code']
-
-
 vote_tab, leaderboard_tab, trends_tab, admin_tab = st.tabs(
     ['🗳️ Vota', '🏆 Classifica', '📈 Andamento', '⚙️ Gestione'],
     key='active_tab', on_change='rerun',
@@ -84,7 +100,7 @@ with vote_tab:
         st.subheader('Vota le lezioni')
         st.markdown('Lascia una valutazione delle lezioni a cui hai partecipato e segui la classifica dei professori durante l’anno **2026/2027**.')
         st.markdown('''
-    1. **Inserisci il codice di 4 cifre** che hai ricevuto privatamente. Scrivi solo i numeri, senza le iniziali. Usa sempre lo stesso codice.
+    1. **Accedi con il codice di 4 cifre** che hai ricevuto privatamente. Il sito può ricordare l’accesso su questo browser per 30 giorni; sui dispositivi condivisi premi “Esci dall’accesso studente” quando hai finito.
     2. **Scegli la lezione** controllando data, Mattina/Pomeriggio, professore e titolo. Le ultime inserite sono in cima: puoi scorrere il menu o scrivere per cercare quelle più vecchie.
     3. **Scegli un voto da 1 a 5 e premi “Invia il voto”.** Aspetta il messaggio “Voto salvato!”: selezionare il numero da solo non invia la valutazione.
     ''')
@@ -104,15 +120,31 @@ with vote_tab:
 
     **Non vedo lezioni da votare?** Potresti averle già valutate tutte, oppure non sono ancora state inserite. Controlla l’opzione delle lezioni già votate o segnala la lezione mancante all’amministratore. La scheda **Gestione** è riservata a lui.
     ''')
-        if 'voter_code' not in st.session_state:
-            st.session_state['voter_code'] = st.session_state.get('saved_voter_code', '')
-        code = st.text_input('Il tuo codice personale (4 cifre)', type='password', max_chars=4, key='voter_code', on_change=remember_voter_code, help='Inserisci soltanto le quattro cifre ricevute, senza le iniziali. Dopo aver scritto, premi Invio o tocca fuori dal campo per caricare le lezioni.')
-        include_voted = st.checkbox('Mostra anche le lezioni già votate', value=False)
-        if not code:
-            st.info('Inserisci il tuo codice per vedere le lezioni ancora da votare.')
+        if not storage_ready:
+            st.info('Recupero dell’accesso su questo browser…')
+        elif not student_logged_in:
+            st.markdown('#### Accedi per votare')
+            st.caption('Il tuo accesso dura fino a 30 giorni su questo browser. Esci sempre dai dispositivi condivisi.')
+            with st.form('student_login', clear_on_submit=True):
+                code = st.text_input('Il tuo codice personale (4 cifre)', type='password', max_chars=4, key='login_code')
+                login_student = st.form_submit_button('Accedi per votare', type='primary')
+            if login_student:
+                try:
+                    token, expires_at, retry_seconds = voter_auth.login(code)
+                except Exception:
+                    st.error('Accesso non disponibile. Riprova più tardi o contatta l’amministratore.')
+                else:
+                    if token:
+                        browser_session.remember(token, expires_at)
+                        st.rerun()
+                    elif retry_seconds:
+                        st.error(f'Troppi tentativi errati. Nuovi accessi temporaneamente bloccati: riprova tra {(retry_seconds + 59) // 60} minuti.')
+                    else:
+                        st.error('Codice non valido. Usa le quattro cifre ricevute privatamente.')
         else:
+            include_voted = st.checkbox('Mostra anche le lezioni già votate', value=False)
             try:
-                available = db.list_lessons(code, include_voted)
+                available = voter_auth.list_lessons(student_token, include_voted)
             except ValueError as exc:
                 st.error(str(exc))
             else:
@@ -130,11 +162,11 @@ with vote_tab:
                             submitted = st.form_submit_button('Invia il voto', type='primary')
                         if submitted:
                             try:
-                                db.add_vote(selected, code, rating)
+                                voter_auth.add_vote(selected, student_token, rating)
                             except ValueError as exc:
                                 st.error(str(exc))
                             except db.INTEGRITY_ERRORS:
-                                st.warning('Con questo codice hai già votato questa lezione.')
+                                st.warning('Hai già votato questa lezione.')
                             else:
                                 st.session_state['vote_saved'] = True
                                 st.rerun()

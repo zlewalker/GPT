@@ -11,6 +11,8 @@ import database as db
 import migrate
 import postgres
 import test_database as original
+import test_voter_auth
+import streamlit as st
 
 
 @unittest.skipUnless(os.environ.get('TEST_DATABASE_URL'), 'TEST_DATABASE_URL not configured')
@@ -31,6 +33,8 @@ class PostgresTests(unittest.TestCase):
                 con.raw.execute(f"DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='{role}') THEN CREATE ROLE {role} NOLOGIN; END IF; END $$")
             schema = (Path(__file__).parents[1] / 'sql/schema.sql').read_text(encoding='utf-8')
             con.raw.execute(schema.replace('votes_app', cls.schema).replace('votes_runtime', cls.role))
+            sessions = (Path(__file__).parents[1] / 'sql/student_sessions.sql').read_text(encoding='utf-8')
+            con.raw.execute(sessions.replace('votes_app', cls.schema).replace('votes_runtime', cls.role))
 
     @classmethod
     def tearDownClass(cls):
@@ -82,7 +86,8 @@ class PostgresTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             db.init_db()
 
-    def test_streamlit_with_postgres_ranking_and_history(self):
+    @patch('browser_session.sync', side_effect=lambda: (True, st.session_state.get('_student_token'), True))
+    def test_streamlit_with_postgres_ranking_and_history(self, storage):
         from streamlit.testing.v1 import AppTest
         for code in ['1234', '2345', '3456']:
             db.add_vote(self.lessons[0]['id'], code, 4)
@@ -101,7 +106,8 @@ class PostgresTests(unittest.TestCase):
         self.assertGreater(len(app.dataframe), 0)
         app.session_state['active_tab'] = '🗳️ Vota'
         app.run()
-        app.text_input(key='voter_code').input('0123').run()
+        app.text_input(key='login_code').input('0123')
+        next(b for b in app.button if b.label == 'Accedi per votare').click().run()
         self.assertEqual(len(app.exception), 0)
 
     def test_pool_reuses_connection_and_rolls_back_failed_transactions(self):
@@ -137,6 +143,27 @@ class PostgresTests(unittest.TestCase):
                 self.assertEqual(con.execute('SELECT current_schema()').fetchone()[0], 'pg_catalog')
         with postgres.connect() as con:
             self.assertEqual(con.execute('SELECT current_schema()').fetchone()[0], self.schema)
+
+    def test_runtime_role_can_login_vote_and_logout(self):
+        from contextlib import contextmanager
+        import voter_auth
+        original_connect = postgres.connect
+
+        @contextmanager
+        def runtime_connect():
+            with original_connect() as con:
+                con.execute(f'SET LOCAL ROLE "{self.role}"')
+                yield con
+
+        with patch.object(postgres, 'connect', runtime_connect):
+            token, _, retry = voter_auth.login('0123')
+            self.assertEqual(retry, 0)
+            self.assertTrue(voter_auth.is_authenticated(token))
+            voter_auth.add_vote(self.lessons[0]['id'], token, 5)
+            self.assertEqual(len(voter_auth.list_lessons(token)), 1)
+            voter_auth.logout(token)
+            self.assertFalse(voter_auth.is_authenticated(token))
+        self.assertEqual(db.teacher_stats()[0]['total_votes'], 1)
 
     def test_runtime_role_can_vote_but_cannot_change_roster_or_delete(self):
         import psycopg
@@ -238,3 +265,9 @@ def concurrent_test(self):
 
 
 PostgresTests.test_concurrent_submissions_record_only_one_vote = concurrent_test
+
+
+# Session invariants are exercised on the real TLS PostgreSQL driver too.
+for name in dir(test_voter_auth.SessionCases):
+    if name.startswith('test_'):
+        setattr(PostgresTests, name, getattr(test_voter_auth.SessionCases, name))

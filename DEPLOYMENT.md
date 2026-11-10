@@ -26,8 +26,8 @@ Migrazioni e ripristino richiedono una connessione amministratore. Per l'app usa
 un login PostgreSQL dedicato, con password casuale, membro del gruppo votes_runtime:
 `GRANT votes_runtime TO nome_login`. Non concedere il gruppo ad anon/authenticated.
 Il gruppo puo' leggere, inserire professori/lezioni/voti/partecipazioni, correggere
-titolo/fascia e aggiornare impostazioni. Non puo' eliminare dati, inserire studenti
-o modificare lo schema. RLS attiva; policy riservate al gruppo server.
+titolo/fascia e aggiornare impostazioni. Non puo' eliminare voti o partecipazioni, inserire studenti
+o modificare lo schema. La tabella delle sessioni permette anche DELETE per il logout. RLS attiva; policy riservate al gruppo server.
 PUBLIC, anon e authenticated non hanno accesso allo schema o alle tabelle.
 L'app comunica dal server Python direttamente con PostgreSQL, senza Data API.
 
@@ -38,7 +38,8 @@ L'app comunica dal server Python direttamente con PostgreSQL, senza Data API.
 2. Fermare brevemente l'app locale prima del trasferimento definitivo: il database
    attuale sta ricevendo nuovi voti. Non raccoglierli su due database indipendenti.
 3. Configurare la connessione amministratore. Applicare sql/schema.sql una sola
-   volta alla destinazione vuota; su Project Votes e' gia' applicato.
+   volta alla destinazione vuota; su Project Votes e' gia' applicato. Applicare poi
+   sql/student_sessions.sql per abilitare l'accesso persistente.
 4. `python migrate.py --apply` crea prima un backup JSON riservato in data/backups/.
    Importa tutto in una transazione, preservando identificativi, digest, chiave HMAC,
    voti e blocco PIN. Rifiuta destinazioni popolate. Confronta tutte le righe prima
@@ -73,7 +74,9 @@ Collegare zlewalker/GPT, branch main, entrypoint app.py, Python 3.12.
 Inserire i Secrets e riavviare. Escludere data/, private/, .venv/ e Secrets.
 Il repository privato non rende privata l'app: scegliere la visibilita' separatamente.
 Classifica e grafici sono visibili a chiunque raggiunga l'app; il codice serve a votare.
-Il limite ai tentativi dei codici studente rimane rinviato come concordato.
+L'accesso studente usa sessioni revocabili di 30 giorni. Applicare sql/student_sessions.sql
+prima del rilascio; cinque tentativi errati nel periodo di 15 minuti bloccano i nuovi
+accessi globalmente. Dettagli e rollback in STUDENT_SESSIONS.md.
 
 Riferimenti:
 - https://supabase.com/docs/guides/database/connecting-to-postgres

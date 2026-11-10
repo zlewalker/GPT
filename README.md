@@ -18,7 +18,7 @@ All'avvio, se il CSV è presente, l'app importa le assegnazioni senza duplicarle
 
 ## Regole
 
-- Una sola valutazione da 1 a 5 per codice e lezione, senza scadenza. Inserendo il codice si vedono prima soltanto le lezioni ancora da votare; una casella permette di vedere anche quelle già valutate.
+- Una sola valutazione da 1 a 5 per codice e lezione, senza scadenza. Dopo l’accesso si vedono prima soltanto le lezioni ancora da votare; una casella permette di vedere anche quelle già valutate.
 - Ogni lezione va inserita una sola volta, scegliendo Mattina o Pomeriggio. La durata è fissa a 4 ore e non moltiplica il peso del voto.
 - Tutti i dati appartengono al 2026/2027; la gestione degli anni successivi è rinviata.
 - Media di tutti i voti con uguale peso; arrotondamento a due decimali con mezzi centesimi verso l'alto prima di assegnare il tier.
@@ -44,7 +44,7 @@ Eseguire `.venv\Scripts\python.exe -m unittest discover -s tests -v`.
 
 ## Lavoro residuo
 
-Vedi TODO.md. In particolare: limiti ai tentativi dei codici studente, sostituzione dei codici persi, gestione correzioni delle lezioni, hosting e prove manuali da telefono.
+Vedi TODO.md. In particolare: sostituzione dei codici persi, gestione correzioni delle lezioni, hosting e prove manuali da telefono.
 
 
 ## Menu lezioni e correzioni
@@ -62,3 +62,7 @@ Modifica lezioni: in Gestione si possono correggere insieme titolo e fascia Matt
 ## Prestazioni e rollback
 
 Le schede caricano i contenuti solo quando aperte. Statistiche condivise nella singola esecuzione, query unica per materia e pool PostgreSQL riducono il lavoro ripetuto. Per dettagli, verifiche e ripristino della versione precedente vedere [PERFORMANCE.md](PERFORMANCE.md).
+
+## Accesso studente
+
+Accesso con il codice personale esistente e sessione di 30 giorni sul browser, con pulsante “Esci dall’accesso studente”. Dopo cinque accessi errati nel periodo di 15 minuti i nuovi accessi sono temporaneamente bloccati globalmente. Voti e partecipazioni restano separati. Prima del rilascio PostgreSQL applicare [sql/student_sessions.sql](sql/student_sessions.sql). Dettagli, limiti e rollback in [STUDENT_SESSIONS.md](STUDENT_SESSIONS.md).
