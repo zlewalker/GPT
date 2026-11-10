@@ -75,6 +75,34 @@ class DatabaseTests(unittest.TestCase):
             digest = con.execute('SELECT voter_digest FROM students LIMIT 1').fetchone()[0]
             self.assertEqual(len(digest), 64)
 
+    def test_subject_history_matches_per_teacher_results_in_one_connection(self):
+        for code, rating in [('1234', 4), ('2345', 5), ('3456', 3)]:
+            db.add_vote(self.lessons[0]['id'], code, rating)
+        db.add_vote(self.lessons[1]['id'], '1234', 2)  # Below visibility threshold.
+        db.add_teacher('Secondo docente', 'Matematica')
+        second = next(t for t in db.list_teachers() if t['name'] == 'Secondo docente')
+        db.add_lesson(second['id'], '2026-11-11', 5, 'Geometria')
+        second_lesson = db.list_lessons()[0]['id']
+        for code in ['1234', '2345', '3456']:
+            db.add_vote(second_lesson, code, 5)
+        db.add_teacher('Altra materia', 'Storia')
+        other = next(t for t in db.list_teachers() if t['name'] == 'Altra materia')
+        db.add_lesson(other['id'], '2026-11-12', 1, 'Storia')
+        for code in ['1234', '2345', '3456']:
+            db.add_vote(db.list_lessons()[0]['id'], code, 1)
+        expected = [
+            dict(row, teacher_name=teacher['name'])
+            for teacher in db.list_teachers() if teacher['subject'] == 'Matematica'
+            for row in db.teacher_history(teacher['id'])
+        ]
+        expected.sort(key=lambda r: (r['lesson_date'], r['slot'], r['teacher_name']))
+        with patch.object(db, 'connect', wraps=db.connect) as connect:
+            actual = db.subject_history('Matematica')
+        self.assertEqual(connect.call_count, 1)
+        self.assertEqual(actual, expected)
+        self.assertEqual(len(actual), 2)
+        self.assertEqual(db.subject_history('Materia inesistente'), [])
+
     def test_admin_locks_after_five_failures_and_expires(self):
         for attempt in range(1, 6):
             ok, remaining, lock = db.admin_login('wrong', 'correct', now=100)

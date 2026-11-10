@@ -58,3 +58,7 @@ Le vecchie lezioni mantengono identificativi e slot originali: slot 1-4 mostrati
 Il progetto è già in uso nella rete locale della classe. Le prove automatiche usano database temporanei. Prima dell'aggiornamento è stato creato un backup SQLite consistente in data/backups/.
 
 Modifica lezioni: in Gestione si possono correggere insieme titolo e fascia Mattina/Pomeriggio, mantenendo voti e partecipazioni. Se la fascia di destinazione contiene una lezione dello stesso professore nella stessa data, la modifica viene rifiutata senza salvare cambiamenti parziali.
+
+## Prestazioni e rollback
+
+Le schede caricano i contenuti solo quando aperte. Statistiche condivise nella singola esecuzione, query unica per materia e pool PostgreSQL riducono il lavoro ripetuto. Per dettagli, verifiche e ripristino della versione precedente vedere [PERFORMANCE.md](PERFORMANCE.md).

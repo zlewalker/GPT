@@ -39,6 +39,7 @@ class PostgresTests(unittest.TestCase):
                 con.raw.execute(f'DROP SCHEMA "{cls.schema}" CASCADE')
                 con.raw.execute(f'DROP ROLE "{cls.role}"')
         finally:
+            postgres.close_pool()
             cls.env.stop()
 
     def setUp(self):
@@ -88,9 +89,53 @@ class PostgresTests(unittest.TestCase):
         app = AppTest.from_file(str(Path(__file__).parents[1] / 'app.py'), default_timeout=30).run()
         self.assertEqual(len(app.exception), 0)
         self.assertEqual(len(app.tabs), 4)
+        self.assertEqual(len(app.dataframe), 0)  # Hidden tabs do no work.
+        app.session_state['active_tab'] = '🏆 Classifica'
+        app.run()
+        self.assertEqual(len(app.exception), 0)
         self.assertGreater(len(app.dataframe), 0)
+        app.session_state['active_tab'] = '📈 Andamento'
+        app.run()
+        self.assertEqual(len(app.exception), 0)
+        self.assertGreater(len(app.get('arrow_vega_lite_chart')), 0)
+        app.session_state['active_tab'] = '🗳️ Vota'
+        app.run()
         app.text_input(key='voter_code').input('0123').run()
         self.assertEqual(len(app.exception), 0)
+
+    def test_pool_reuses_connection_and_rolls_back_failed_transactions(self):
+        postgres.close_pool()
+        with postgres.connect() as con:
+            first_pid = con.execute('SELECT pg_backend_pid()').fetchone()[0]
+        with self.assertRaises(ValueError):
+            with postgres.connect() as con:
+                self.assertEqual(con.execute('SELECT pg_backend_pid()').fetchone()[0], first_pid)
+                con.execute("INSERT INTO settings VALUES ('rollback_pool_test', 'bad')")
+                con.execute('SET LOCAL ROLE "' + self.role + '"')
+                raise ValueError('Abort transaction')
+        with postgres.connect() as con:
+            self.assertEqual(con.execute('SELECT pg_backend_pid()').fetchone()[0], first_pid)
+            self.assertIsNone(con.execute("SELECT value FROM settings WHERE key='rollback_pool_test'").fetchone())
+            self.assertNotEqual(con.execute('SELECT current_user').fetchone()[0], self.role)
+        # Maintenance can disable pooling without changing transaction semantics.
+        with patch.dict(os.environ, {'DATABASE_POOL_ENABLED': '0'}):
+            with postgres.connect() as con:
+                self.assertEqual(con.execute('SELECT COUNT(*) FROM teachers').fetchone()[0], 1)
+
+    def test_pool_applies_schema_per_borrow_and_recovers_closed_connections(self):
+        postgres.close_pool()
+        with postgres.connect() as con:
+            old_pid = con.execute('SELECT pg_backend_pid()').fetchone()[0]
+            con.raw.close()
+        with postgres.connect() as con:
+            self.assertNotEqual(con.execute('SELECT pg_backend_pid()').fetchone()[0], old_pid)
+            self.assertEqual(con.execute('SELECT current_schema()').fetchone()[0], self.schema)
+        with patch.dict(os.environ, {'DATABASE_SCHEMA': self.schema + '_other'}):
+            with postgres.connect() as con:
+                # Nonexistent requested schema must not inherit the prior schema.
+                self.assertEqual(con.execute('SELECT current_schema()').fetchone()[0], 'pg_catalog')
+        with postgres.connect() as con:
+            self.assertEqual(con.execute('SELECT current_schema()').fetchone()[0], self.schema)
 
     def test_runtime_role_can_vote_but_cannot_change_roster_or_delete(self):
         import psycopg
