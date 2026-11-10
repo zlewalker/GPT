@@ -1,0 +1,137 @@
+"""Real driver tests, isolated in a disposable schema; opt in with TEST_DATABASE_URL."""
+import os
+from pathlib import Path
+import secrets
+import sqlite3
+import tempfile
+import unittest
+from unittest.mock import patch
+
+import database as db
+import migrate
+import postgres
+import test_database as original
+
+
+@unittest.skipUnless(os.environ.get('TEST_DATABASE_URL'), 'TEST_DATABASE_URL not configured')
+class PostgresTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import psycopg
+        cls.schema = 'votes_test_' + secrets.token_hex(8)
+        cls.role = cls.schema + '_runtime'
+        cls.env = patch.dict(os.environ, {
+            'DATABASE_URL': os.environ['TEST_DATABASE_URL'],
+            'DATABASE_SCHEMA': cls.schema,
+        })
+        cls.env.start()
+        with postgres.connect() as con:
+            # Supabase has these roles; a dedicated local CI database does not.
+            for role in ('anon', 'authenticated'):
+                con.raw.execute(f"DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='{role}') THEN CREATE ROLE {role} NOLOGIN; END IF; END $$")
+            schema = (Path(__file__).parents[1] / 'sql/schema.sql').read_text(encoding='utf-8')
+            con.raw.execute(schema.replace('votes_app', cls.schema).replace('votes_runtime', cls.role))
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            with postgres.connect() as con:
+                con.raw.execute(f'DROP SCHEMA "{cls.schema}" CASCADE')
+                con.raw.execute(f'DROP ROLE "{cls.role}"')
+        finally:
+            cls.env.stop()
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.roster = Path(self.temp.name) / 'codes.csv'
+        self.roster.write_text('Iniziali;Codice\nAA;1234\nBB;2345\nCC;3456\nDD;0123\n', encoding='utf-8')
+        with postgres.connect() as con:
+            con.execute('TRUNCATE participation, votes, lessons, teachers, students, settings RESTART IDENTITY CASCADE')
+            for key, value in [('schema_version', '1'), ('migration_ready', '1'), ('school_year', db.SCHOOL_YEAR), ('voter_key', secrets.token_hex(32))]:
+                con.execute('INSERT INTO settings VALUES (?, ?)', (key, value))
+        db.init_db()
+        db.import_student_codes(self.roster)
+        db.add_teacher('Prof. Prova', 'Matematica')
+        self.teacher_id = db.list_teachers()[0]['id']
+        db.add_lesson(self.teacher_id, '2026-11-10', 1, 'Equazioni')
+        db.add_lesson(self.teacher_id, '2026-11-10', 2, 'Grafici')
+        self.lessons = db.lessons_on('2026-11-10')
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def assertRaises(self, expected, *args, **kwargs):
+        # Original SQLite business tests expect the equivalent driver error.
+        if expected is sqlite3.IntegrityError:
+            expected = db.INTEGRITY_ERRORS
+        return super().assertRaises(expected, *args, **kwargs)
+
+    def test_vote_failure_rolls_back_participation(self):
+        with postgres.connect() as con:
+            con.execute('ALTER TABLE votes ADD CONSTRAINT reject_test_vote CHECK (rating < 0)')
+        with self.assertRaises(db.INTEGRITY_ERRORS):
+            db.add_vote(self.lessons[0]['id'], '1234', 5)
+        with postgres.connect() as con:
+            self.assertEqual(con.execute('SELECT COUNT(*) FROM participation').fetchone()[0], 0)
+            con.execute('ALTER TABLE votes DROP CONSTRAINT reject_test_vote')
+
+    def test_unmigrated_database_fails_closed(self):
+        with postgres.connect() as con:
+            con.execute("DELETE FROM settings WHERE key = 'migration_ready'")
+        with self.assertRaises(RuntimeError):
+            db.init_db()
+
+    def test_migration_exact_comparison_and_repeat_refusal(self):
+        db.add_vote(self.lessons[0]['id'], '0123', 5)
+        with postgres.connect() as con:
+            source = migrate.read_rows(con)
+            con.execute('TRUNCATE participation, votes, lessons, teachers, students, settings RESTART IDENTITY CASCADE')
+            con.execute("INSERT INTO settings VALUES ('schema_version', '1')")
+        migrate.import_postgres(source)
+        with postgres.connect() as con:
+            migrate.verify(con, source)
+        self.assertEqual(len(db.list_lessons('0123')), 1)
+        with self.assertRaises(ValueError):
+            migrate.import_postgres(source)
+        db.add_teacher('Second', 'Second')
+        self.assertGreater(max(t['id'] for t in db.list_teachers()), self.teacher_id)
+
+    def test_migration_failure_rolls_back_every_table(self):
+        with postgres.connect() as con:
+            source = migrate.read_rows(con)
+            con.execute('TRUNCATE participation, votes, lessons, teachers, students, settings RESTART IDENTITY CASCADE')
+            con.execute("INSERT INTO settings VALUES ('schema_version', '1')")
+        with patch.object(migrate, 'verify', side_effect=ValueError('forced failure')):
+            with self.assertRaises(ValueError):
+                migrate.import_postgres(source)
+        with postgres.connect() as con:
+            self.assertFalse(any(migrate.read_rows(con).values()))
+
+
+# Exercise the same business cases on both backends; SQL-specific tests stay separate.
+for name in dir(original.DatabaseTests):
+    if name.startswith('test_') and name not in {
+        'test_legacy_migration_preserves_results_and_duplicate_block',
+        'test_ratings_have_no_student_identifier_or_timestamp',
+        'test_vote_failure_rolls_back_participation',
+        'test_concurrent_submissions_record_only_one_vote',
+    }:
+        setattr(PostgresTests, name, getattr(original.DatabaseTests, name))
+
+
+def concurrent_test(self):
+    from concurrent.futures import ThreadPoolExecutor
+    def submit(_):
+        try:
+            db.add_vote(self.lessons[0]['id'], '1234', 5)
+            return True
+        except db.INTEGRITY_ERRORS:
+            return False
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        self.assertEqual(sum(pool.map(submit, range(4))), 1)
+    with postgres.connect() as con:
+        self.assertEqual(con.execute('SELECT COUNT(*) FROM participation').fetchone()[0], 1)
+        self.assertEqual(con.execute('SELECT COUNT(*) FROM votes').fetchone()[0], 1)
+
+
+PostgresTests.test_concurrent_submissions_record_only_one_vote = concurrent_test
