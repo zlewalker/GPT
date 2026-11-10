@@ -258,6 +258,24 @@ def teacher_history(teacher_id, min_votes_per_lesson=3):
         ''', (teacher_id, min_votes_per_lesson)))
 
 
+
+def subject_history(subject, min_votes_per_lesson=3):
+    """Fetch all eligible lessons for a subject in one query/connection."""
+    with connect() as con:
+        return _dicts(con.execute('''
+            SELECT l.lesson_date, l.slot, l.topic, t.name AS teacher_name,
+                   COUNT(v.id) AS total_votes,
+                   AVG(v.rating) AS average_rating
+            FROM lessons l
+            JOIN teachers t ON t.id = l.teacher_id
+            JOIN votes v ON v.lesson_id = l.id
+            WHERE t.subject = ?
+            GROUP BY l.id, l.lesson_date, l.slot, l.topic, t.name
+            HAVING COUNT(v.id) >= ?
+            ORDER BY l.lesson_date, l.slot, t.name, l.id
+        ''', (subject, min_votes_per_lesson)))
+
+
 def admin_login(entered, expected, now=None):
     """Persistent global limit: five failures block new logins for 15 minutes."""
     if not expected:

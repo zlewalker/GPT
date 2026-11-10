@@ -1,10 +1,17 @@
 """Small PostgreSQL adapter for the application's parameterized SQL."""
 
+import atexit
 from contextlib import contextmanager
 import os
 from pathlib import Path
 import re
 import tomllib
+from threading import Lock
+
+
+_pool = None
+_pool_key = None
+_pool_lock = Lock()
 
 
 def setting(name, default=''):
@@ -81,6 +88,35 @@ class Connection:
         return Cursor(self.raw.execute(query, params))
 
 
+def close_pool():
+    """Release idle connections; active borrowers finish their transactions."""
+    global _pool, _pool_key
+    with _pool_lock:
+        if _pool is not None:
+            _pool.close()
+        _pool = _pool_key = None
+
+
+atexit.register(close_pool)
+
+
+def _get_pool(options):
+    from psycopg_pool import ConnectionPool
+    global _pool, _pool_key
+    key = tuple(sorted(options.items()))
+    with _pool_lock:
+        if _pool is None or _pool_key != key:
+            if _pool is not None:
+                _pool.close()
+            _pool = ConnectionPool(
+                conninfo='', kwargs=dict(options, prepare_threshold=None),
+                min_size=0, max_size=4, max_idle=60, max_lifetime=600,
+                timeout=10, check=ConnectionPool.check_connection, open=True,
+            )
+            _pool_key = key
+        return _pool
+
+
 @contextmanager
 def connect():
     try:
@@ -93,11 +129,19 @@ def connect():
         raise ValueError('La connessione PostgreSQL richiede TLS (sslmode=require).')
     options.setdefault('sslmode', 'require')
     options.setdefault('connect_timeout', '10')
-    # No prepared statements: compatible with Supavisor transaction pooling.
-    with psycopg.connect(**options, prepare_threshold=None) as raw:
-        raw.execute(f'SET LOCAL search_path TO "{schema_name()}", pg_catalog')
-        raw.execute("SET LOCAL statement_timeout = '20s'")
-        raw.execute("SET LOCAL lock_timeout = '15s'")
+    # Keep the same transaction boundary in both modes. Never share an active
+    # connection between sessions, and never retry writes after a network error.
+    use_pool = str(setting('DATABASE_POOL_ENABLED', '1')).strip().lower() not in ('0', 'false', 'no')
+    manager = (_get_pool(options).connection() if use_pool
+               else psycopg.connect(**options, prepare_threshold=None))
+    with manager as raw:
+        # Transaction-local settings cannot leak to the next borrower or schema.
+        # One round trip instead of three; schema_name() validates the identifier.
+        raw.execute(
+            f'SET LOCAL search_path TO "{schema_name()}", pg_catalog; '
+            "SET LOCAL statement_timeout = '20s'; "
+            "SET LOCAL lock_timeout = '15s'"
+        )
         yield Connection(raw)
 
 
