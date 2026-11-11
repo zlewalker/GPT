@@ -100,6 +100,8 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS student_sessions_expiry_idx ON student_sessions(expires_at);
         """)
+        from courses import SQLITE_SCHEMA
+        con.executescript(SQLITE_SCHEMA)
         vote_columns = {row['name'] for row in con.execute('PRAGMA table_info(votes)')}
         if 'voter_digest' in vote_columns:
             backup_path = DB_PATH.with_name(DB_PATH.name + '.before_anonymous.bak')
@@ -144,7 +146,9 @@ def begin_write(con):
 
 def list_teachers():
     with connect() as con:
-        return _dicts(con.execute('SELECT * FROM teachers ORDER BY LOWER(name), LOWER(subject)'))
+        return _dicts(con.execute('''SELECT t.*, COALESCE(s.closed, 0) AS is_closed
+            FROM teachers t LEFT JOIN course_state s ON s.teacher_id=t.id
+            ORDER BY LOWER(t.name), LOWER(t.subject)'''))
 
 
 def add_teacher(name, subject):
@@ -164,6 +168,9 @@ def add_lesson(teacher_id, lesson_date, slot, topic='', duration_hours=4):
         raise ValueError('Argomento troppo lungo (massimo 150 caratteri).')
     with connect() as con:
         begin_write(con)
+        state = con.execute('SELECT closed FROM course_state WHERE teacher_id=?', (teacher_id,)).fetchone()
+        if state is not None and state['closed'] == 1:
+            raise ValueError('Corso terminato: riaprilo dalla Gestione prima di aggiungere lezioni.')
         con.execute('''
             INSERT INTO lessons (teacher_id, lesson_date, slot, topic, duration_hours)
             VALUES (?, ?, ?, ?, ?)

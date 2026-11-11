@@ -12,6 +12,7 @@ import migrate
 import postgres
 import test_database as original
 import test_voter_auth
+import test_courses
 import streamlit as st
 
 
@@ -35,6 +36,8 @@ class PostgresTests(unittest.TestCase):
             con.raw.execute(schema.replace('votes_app', cls.schema).replace('votes_runtime', cls.role))
             sessions = (Path(__file__).parents[1] / 'sql/student_sessions.sql').read_text(encoding='utf-8')
             con.raw.execute(sessions.replace('votes_app', cls.schema).replace('votes_runtime', cls.role))
+            courses_sql = (Path(__file__).parents[1] / 'sql/course_reviews.sql').read_text(encoding='utf-8')
+            con.raw.execute(courses_sql.replace('votes_app', cls.schema).replace('votes_runtime', cls.role))
 
     @classmethod
     def tearDownClass(cls):
@@ -64,6 +67,44 @@ class PostgresTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    token = test_courses.CourseTests.token
+
+    def test_runtime_course_completion_and_database_closure_guard(self):
+        from contextlib import contextmanager
+        import courses
+        import psycopg
+        original_connect = postgres.connect
+
+        @contextmanager
+        def runtime_connect():
+            with original_connect() as con:
+                con.execute(f'SET LOCAL ROLE "{self.role}"')
+                yield con
+
+        with patch.object(postgres, 'connect', runtime_connect):
+            courses.set_closed(self.teacher_id, True)
+            token = self.token()
+            self.assertEqual(voter_auth.complete_course(self.teacher_id, token, 5, 2), 2)
+            with db.connect() as con:
+                with self.assertRaises(psycopg.errors.CheckViolation):
+                    with con.raw.transaction():
+                        con.execute("INSERT INTO lessons(teacher_id, lesson_date, slot) VALUES (?, '2026-11-12', 1)", (self.teacher_id,))
+            self.assertEqual(db.teacher_stats()[0]['total_votes'], 2)
+
+    def test_course_completion_round_trip_preserves_closed_status(self):
+        import courses
+        courses.set_closed(self.teacher_id, True)
+        voter_auth.complete_course(self.teacher_id, self.token(), 5, 2)
+        with postgres.connect() as con:
+            source = migrate.read_rows(con)
+            con.execute('TRUNCATE participation, votes, lessons, teachers, students, settings RESTART IDENTITY CASCADE')
+            con.execute("INSERT INTO settings VALUES ('schema_version', '1')")
+        migrate.import_postgres(source)
+        with postgres.connect() as con:
+            migrate.verify(con, source)
+        self.assertTrue(db.list_teachers()[0]['is_closed'])
+        self.assertEqual(db.teacher_stats()[0]['total_votes'], 2)
 
     def assertRaises(self, expected, *args, **kwargs):
         # Original SQLite business tests expect the equivalent driver error.
@@ -271,3 +312,9 @@ PostgresTests.test_concurrent_submissions_record_only_one_vote = concurrent_test
 for name in dir(test_voter_auth.SessionCases):
     if name.startswith('test_'):
         setattr(PostgresTests, name, getattr(test_voter_auth.SessionCases, name))
+
+
+# Course closure and atomic bulk recovery run against PostgreSQL with TLS too.
+for name in dir(test_courses.CourseTests):
+    if name.startswith('test_'):
+        setattr(PostgresTests, name, getattr(test_courses.CourseTests, name))

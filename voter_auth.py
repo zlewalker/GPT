@@ -103,3 +103,22 @@ def add_vote(lesson_id, token, rating):
         if digest is None:
             raise ValueError('Accesso scaduto o terminato. Accedi di nuovo con il tuo codice.')
         db._record_vote(con, lesson_id, digest, rating)
+
+
+def list_courses(token, include_completed=False):
+    import courses
+    with db.connect() as con:
+        digest = _session_digest(con, token)
+        if digest is None:
+            raise ValueError('Accesso scaduto o terminato. Accedi di nuovo con il tuo codice.')
+        return courses.list_for_digest(con, digest, include_completed)
+
+
+def complete_course(teacher_id, token, rating, expected_count):
+    import courses
+    with db.connect() as con:
+        db.begin_write(con)
+        digest = _session_digest(con, token)
+        if digest is None:
+            raise ValueError('Accesso scaduto o terminato. Accedi di nuovo con il tuo codice.')
+        return courses.complete_missing(con, teacher_id, digest, rating, expected_count)

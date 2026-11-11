@@ -78,3 +78,12 @@ Provare l'app con i codici assegnati; completare la gestione delle sostituzioni 
 Modifica lezioni: in Gestione si possono correggere insieme titolo e fascia Mattina/Pomeriggio, mantenendo voti e partecipazioni. Se la fascia di destinazione contiene una lezione dello stesso professore nella stessa data, la modifica viene rifiutata senza salvare cambiamenti parziali.
 
 - [x] Guida studenti nella schermata Vota: tre passaggi iniziali, regole, lezioni già votate, risultati, riservatezza e assistenza. Verificata con AppTest.
+
+
+## Aggiornamento corsi
+
+- [x] Chiusura/riapertura professore-materia senza perdita di voti.
+- [x] Blocco di nuove lezioni per corsi terminati.
+- [x] Completamento atomico delle sole lezioni mancanti con lo stesso voto, conferma esplicita e conservazione dei voti precedenti.
+- [x] Nessuna media separata del corso; riuso delle statistiche esistenti e invalidazione della cache dopo il salvataggio.
+- [x] Backup sorgenti e snapshot privata prima dell'intervento; branch GitHub di rollback.

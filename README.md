@@ -66,3 +66,8 @@ Le schede caricano i contenuti solo quando aperte. Statistiche condivise nella s
 ## Accesso studente
 
 Accesso con il codice personale esistente e sessione di 30 giorni sul browser, con pulsante “Esci dall’accesso studente”. Dopo cinque accessi errati nel periodo di 15 minuti i nuovi accessi sono temporaneamente bloccati globalmente. Voti e partecipazioni restano separati. Prima del rilascio PostgreSQL applicare [sql/student_sessions.sql](sql/student_sessions.sql). Dettagli, limiti e rollback in [STUDENT_SESSIONS.md](STUDENT_SESSIONS.md).
+
+
+## Corsi terminati e completamento rapido
+
+In Gestione si può chiudere/riaprire la coppia professore-materia. Un corso chiuso non accetta nuove lezioni. Dopo l'accesso lo studente può scegliere Corso terminato e applicare, con conferma, lo stesso voto a tutte le lezioni mancanti senza modificare i voti precedenti. Non esiste una media separata: sono normali voti delle lezioni. Vedi COURSES.md per prestazioni, migrazione, backup e rollback.

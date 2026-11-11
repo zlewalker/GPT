@@ -13,6 +13,7 @@ import browser_session
 import mobile_ui
 import voter_auth
 import read_cache
+import courses
 from rules import tier_for, rounded_score
 
 MIN_VOTES = 3
@@ -106,9 +107,55 @@ def lesson_label(row):
     return f"{date_label} - {db.period_label(row['slot'])} - {row['teacher_name']} - {row['subject']} - {title} (#{row['id']}){voted}"
 
 
+def show_course_vote(student_token):
+    st.caption('Scegli un voto da applicare a tutte le lezioni del corso che non hai ancora valutato. I voti già inviati non cambiano.')
+    include_voted = st.checkbox('Mostra anche i corsi già completati', key='include_course_voted')
+    try:
+        available = voter_auth.list_courses(student_token, include_voted)
+    except ValueError as exc:
+        st.error(str(exc))
+        return
+    if not available:
+        st.info('Nessun corso terminato da completare: potrebbe non essere ancora stato chiuso dall’amministratore oppure hai già votato tutte le sue lezioni.')
+    else:
+        lookup = {row['id']: row for row in available}
+        selected = st.selectbox('Corso terminato', list(lookup),
+            format_func=lambda ident: f"{lookup[ident]['subject']} — {lookup[ident]['name']} · {lookup[ident]['missing_lessons']} lezioni da completare",
+            key='course_vote_selection')
+        missing = lookup[selected]['missing_lessons']
+        if not missing:
+            st.info('Non ci sono lezioni da completare per questo corso.')
+        else:
+            st.write(f"**{lookup[selected]['subject']} — {lookup[selected]['name']}**")
+            st.info(f"Il voto scelto verrà registrato su {missing} lezioni non ancora votate, su {lookup[selected]['total_lessons']} totali. I {lookup[selected]['voted_lessons']} voti già espressi rimarranno invariati.")
+            with st.form('course_vote_form'):
+                rating = st.radio('Voto per tutte le lezioni mancanti', [1, 2, 3, 4, 5], index=3, horizontal=True, key='course_rating')
+                st.caption('Ogni voto conterà nella media del professore, nella tier list e nel grafico della relativa lezione, con lo stesso peso di un voto singolo. Dopo l’invio non puoi modificarli.')
+                confirmed = st.checkbox(f'Confermo lo stesso voto per tutte le {missing} lezioni mancanti', key='confirm_course_vote')
+                submit = st.form_submit_button('Completa i voti del corso', type='primary', width='stretch')
+            if submit:
+                if not confirmed:
+                    st.error('Conferma l’applicazione del voto alle lezioni mancanti prima di inviare.')
+                else:
+                    try:
+                        completed = voter_auth.complete_course(selected, student_token, rating, missing)
+                    except ValueError as exc:
+                        st.error(str(exc))
+                    except db.INTEGRITY_ERRORS:
+                        st.warning('Invio non completato. Aggiorna la pagina e controlla le lezioni ancora da votare.')
+                    else:
+                        read_cache.clear()
+                        st.session_state['course_vote_saved'] = completed
+                        st.rerun()
+    completed = st.session_state.pop('course_vote_saved', None)
+    if completed:
+        st.success(f'Voti salvati su {completed} lezioni. Grazie!')
+    st.caption('La partecipazione resta separata dalle valutazioni, come per i voti alle singole lezioni.')
+
+
 @st.fragment
 def show_vote(student_token, storage_ready, student_logged_in):
-    st.subheader('Vota le lezioni')
+    st.subheader('Vota le lezioni o il corso')
     st.caption('Scegli una lezione, valuta da 1 a 5 e conferma l’invio. Puoi votare anche le lezioni passate.')
     if not storage_ready:
         st.info('Recupero dell’accesso su questo browser…')
@@ -132,43 +179,47 @@ def show_vote(student_token, storage_ready, student_logged_in):
                     st.error('Codice non valido. Usa le quattro cifre ricevute privatamente.')
     else:
         st.caption('Accesso studente attivo')
-        include_voted = st.checkbox('Mostra anche le lezioni già votate', value=False)
-        try:
-            available = voter_auth.list_lessons(student_token, include_voted)
-        except ValueError as exc:
-            st.error(str(exc))
+        vote_kind = st.selectbox('Tipo di valutazione', ['Singole lezioni', 'Corso terminato'], key='vote_kind')
+        if vote_kind == 'Corso terminato':
+            show_course_vote(student_token)
         else:
-            if not available:
-                st.info('Non ci sono lezioni da votare. Potresti averle già valutate tutte.')
+            include_voted = st.checkbox('Mostra anche le lezioni già votate', value=False)
+            try:
+                available = voter_auth.list_lessons(student_token, include_voted)
+            except ValueError as exc:
+                st.error(str(exc))
             else:
-                lookup = {row['id']: row for row in available}
-                selected = st.selectbox('Lezione', options=list(lookup), format_func=lambda lesson_id: lesson_label(lookup[lesson_id]), key='vote_lesson')
-                lesson = lookup[selected]
-                st.html(
-                    '<article class="pv-lesson" aria-label="Riepilogo della lezione">'
-                    f'<div class="pv-lesson-meta">{escape(datetime.strptime(lesson["lesson_date"], "%Y-%m-%d").strftime("%d/%m/%Y"))} · {escape(db.period_label(lesson["slot"]))}</div>'
-                    f'<div class="pv-lesson-title">{escape(lesson["topic"] or lesson["subject"])}</div>'
-                    f'<div class="pv-lesson-meta">{escape(lesson["teacher_name"])} · {escape(lesson["subject"])}</div>'
-                    '</article>'
-                )
-                if lesson['has_voted']:
-                    st.info('Hai già votato questa lezione. Il voto non può essere ripetuto.')
+                if not available:
+                    st.info('Non ci sono lezioni da votare. Potresti averle già valutate tutte.')
                 else:
-                    with st.form('form_vote'):
-                        rating = st.radio('Quanto valuti questa lezione?', [1, 2, 3, 4, 5], index=3, horizontal=True)
-                        st.caption('1 = valutazione più bassa · 5 = valutazione più alta')
-                        submitted = st.form_submit_button('Invia il voto', type='primary', width='stretch')
-                    if submitted:
-                        try:
-                            voter_auth.add_vote(selected, student_token, rating)
-                        except ValueError as exc:
-                            st.error(str(exc))
-                        except db.INTEGRITY_ERRORS:
-                            st.warning('Hai già votato questa lezione.')
-                        else:
-                            read_cache.clear()
-                            st.session_state['vote_saved'] = True
-                            st.rerun()
+                    lookup = {row['id']: row for row in available}
+                    selected = st.selectbox('Lezione', options=list(lookup), format_func=lambda lesson_id: lesson_label(lookup[lesson_id]), key='vote_lesson')
+                    lesson = lookup[selected]
+                    st.html(
+                        '<article class="pv-lesson" aria-label="Riepilogo della lezione">'
+                        f'<div class="pv-lesson-meta">{escape(datetime.strptime(lesson["lesson_date"], "%Y-%m-%d").strftime("%d/%m/%Y"))} · {escape(db.period_label(lesson["slot"]))}</div>'
+                        f'<div class="pv-lesson-title">{escape(lesson["topic"] or lesson["subject"])}</div>'
+                        f'<div class="pv-lesson-meta">{escape(lesson["teacher_name"])} · {escape(lesson["subject"])}</div>'
+                        '</article>'
+                    )
+                    if lesson['has_voted']:
+                        st.info('Hai già votato questa lezione. Il voto non può essere ripetuto.')
+                    else:
+                        with st.form('form_vote'):
+                            rating = st.radio('Quanto valuti questa lezione?', [1, 2, 3, 4, 5], index=3, horizontal=True)
+                            st.caption('1 = valutazione più bassa · 5 = valutazione più alta')
+                            submitted = st.form_submit_button('Invia il voto', type='primary', width='stretch')
+                        if submitted:
+                            try:
+                                voter_auth.add_vote(selected, student_token, rating)
+                            except ValueError as exc:
+                                st.error(str(exc))
+                            except db.INTEGRITY_ERRORS:
+                                st.warning('Hai già votato questa lezione.')
+                            else:
+                                read_cache.clear()
+                                st.session_state['vote_saved'] = True
+                                st.rerun()
     if st.session_state.pop('vote_saved', False):
         st.success('Voto salvato! Grazie.')
     st.caption('La partecipazione viene registrata separatamente dalla valutazione.')
@@ -182,6 +233,8 @@ def show_vote(student_token, storage_ready, student_logged_in):
         st.info('Puoi recuperare anche le lezioni passate: non c’è una scadenza. Ogni lezione accetta un solo voto per codice, anche se dura 4 ore. Dopo l’invio il voto non può essere modificato.')
         st.markdown('''
 **Perché una lezione scompare?** Dopo il voto viene tolta dall’elenco delle lezioni da valutare. Attiva **“Mostra anche le lezioni già votate”** per ritrovarla: sarà indicata come già votata e non potrai inviare un altro voto. Il voto precedente non viene mostrato.
+
+**Vuoi valutare tutto il corso?** Dopo l’accesso scegli **Corso terminato**. Puoi scegliere un voto da applicare a tutte le lezioni non ancora votate di quella materia e professore. Il corso deve essere chiuso dall’amministratore. I voti precedenti non cambiano; quelli completati contano normalmente nella media, nella tier list e nei grafici delle lezioni.
 
 **Cosa significano i numeri?** 1 è la valutazione più bassa, 5 la più alta. Valuta l’esperienza della lezione a cui hai partecipato.
 
@@ -254,6 +307,8 @@ with leaderboard_tab:
     if leaderboard_tab.open:
         st.subheader('Classifica dei professori')
         show_leaderboard(stats)
+
+
 
 
 @st.fragment
@@ -439,7 +494,7 @@ with admin_tab:
                             st.rerun()
                 with b:
                     st.markdown('#### 2. Pianifica una lezione')
-                    options = read_cache.list_teachers()
+                    options = [row for row in read_cache.list_teachers() if not row['is_closed']]
                     if options:
                         with st.form('add_lesson', clear_on_submit=False):
                             who = st.selectbox(
@@ -465,7 +520,29 @@ with admin_tab:
                                 st.success('Lezione aggiunta.')
                                 st.rerun()
                     else:
-                        st.info('Aggiungi prima un professore.')
+                        st.info('Nessun corso aperto. Aggiungi un professore o riapri un corso terminato.')
+                st.divider()
+                st.markdown('#### Stato dei corsi')
+                all_courses = read_cache.list_teachers()
+                if all_courses:
+                    course_lookup = {row['id']: row for row in all_courses}
+                    course_id = st.selectbox('Corso da gestire', list(course_lookup), key='manage_course',
+                        format_func=lambda ident: f"{course_lookup[ident]['subject']} - {course_lookup[ident]['name']}" + (' - Terminato' if course_lookup[ident]['is_closed'] else ' - In corso'))
+                    with st.form(f'course_state_{course_id}'):
+                        closed = st.checkbox('Corso terminato', value=bool(course_lookup[course_id]['is_closed']), key=f'course_closed_{course_id}')
+                        st.caption('Un corso terminato non accetta nuove lezioni. Le lezioni passate restano votabili; si abilita il completamento delle lezioni mancanti con lo stesso voto. Puoi riaprire il corso senza perdere dati.')
+                        save_course = st.form_submit_button('Salva stato del corso')
+                    if save_course:
+                        try:
+                            courses.set_closed(course_id, closed)
+                        except ValueError as exc:
+                            st.error(str(exc))
+                        else:
+                            read_cache.clear()
+                            st.session_state['course_state_saved'] = True
+                            st.rerun()
+                    if st.session_state.pop('course_state_saved', False):
+                        st.success('Stato del corso aggiornato.')
                 st.divider()
                 st.markdown('#### Correggi una lezione')
                 all_lessons = db.list_lessons()
