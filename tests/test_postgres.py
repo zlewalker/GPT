@@ -13,6 +13,7 @@ import postgres
 import test_database as original
 import test_voter_auth
 import test_courses
+import voter_auth
 import streamlit as st
 
 

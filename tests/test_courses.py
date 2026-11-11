@@ -154,3 +154,30 @@ class CourseTests(unittest.TestCase):
         voter_auth.complete_course(self.teacher_id, token, 5, 2)
         self.assertEqual(len(voter_auth.list_lessons(token)), 1)
         self.assertEqual(voter_auth.list_lessons(token)[0]['teacher_id'], other['id'])
+
+    def test_bulk_recovery_has_bounded_database_round_trips(self):
+        from contextlib import contextmanager
+        for day in range(1, 29):
+            db.add_lesson(self.teacher_id, f'2026-10-{day:02d}', 1)
+        courses.set_closed(self.teacher_id, True)
+        token = self.token()
+        original_connect = db.connect
+        queries = []
+
+        class TrackedConnection:
+            def __init__(self, connection):
+                self.connection = connection
+
+            def execute(self, sql, parameters=()):
+                queries.append(sql)
+                return self.connection.execute(sql, parameters)
+
+        @contextmanager
+        def tracked_connect():
+            with original_connect() as connection:
+                yield TrackedConnection(connection)
+
+        with patch.object(db, 'connect', tracked_connect):
+            self.assertEqual(voter_auth.complete_course(self.teacher_id, token, 5, 30), 30)
+        self.assertLessEqual(len(queries), 6)
+        self.assertEqual(sum(sql.startswith('INSERT') for sql in queries), 2)

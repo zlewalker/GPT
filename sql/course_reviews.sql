@@ -1,6 +1,6 @@
 -- Additive migration. Apply after schema.sql and student_sessions.sql.
 -- Keep course_state on rollback. Recovery writes ordinary lesson votes.
-SET lock_timeout = '5s';
+SET LOCAL lock_timeout = '5s';
 CREATE TABLE votes_app.course_state (
     teacher_id BIGINT PRIMARY KEY REFERENCES votes_app.teachers(id) ON DELETE RESTRICT,
     closed INTEGER NOT NULL CHECK (closed IN (0, 1))
