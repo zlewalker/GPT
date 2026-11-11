@@ -116,3 +116,13 @@ class PageLoadingTests(unittest.TestCase):
         next(button for button in self.app.button if button.label == 'Aggiungi professore').click().run()
         self.assertEqual(len(self.app.exception), 0)
         self.assertEqual(len(db.list_teachers()), 2)
+
+    def test_logout_from_admin_then_return_to_vote(self):
+        self.app.run()
+        self.app.text_input(key='login_code').input('0123')
+        next(b for b in self.app.button if b.label == 'Accedi per votare').click().run()
+        self.select_tab('⚙️ Gestione')
+        self.app.button(key='student_logout').click().run()
+        self.select_tab('🗳️ Vota')
+        self.assertEqual(len(self.app.text_input), 1)
+        self.assertEqual(self.app.text_input[0].key, 'login_code')

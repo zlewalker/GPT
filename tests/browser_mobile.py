@@ -154,7 +154,15 @@ def main():
                     assert_no_overflow(page)
                     logout.click()
                     page.get_by_role('tab', name='🗳️ Vota', exact=True).click()
-                    expect(field).to_be_visible()
+                    try:
+                        expect(field).to_be_visible(timeout=15000)
+                    except AssertionError:
+                        page.screenshot(path=str(output / f'{label}-logout-debug.png'), full_page=True)
+                        print('Logout selected tabs:', page.get_by_role('tab', selected=True).all_text_contents())
+                        print('Logout messages:', page.locator('[data-testid="stException"], [role="alert"]').all_text_contents())
+                        print('Logout login form count:', page.get_by_role('button', name='Accedi per votare', exact=True).count())
+                        print('Logout active session count:', page.get_by_text('Accesso studente attivo', exact=True).count())
+                        raise
                     assert not errors, errors
                     context.close()
                     print(f'Responsive checks passed: {label}')
