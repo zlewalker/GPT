@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import database as db
 import browser_session
+import read_cache
 import streamlit as st
 from streamlit.testing.v1 import AppTest
 
@@ -30,6 +31,7 @@ class PageLoadingTests(unittest.TestCase):
         storage.start()
         self.addCleanup(storage.stop)
         st.cache_resource.clear()
+        read_cache.clear()
         db.init_db()
         roster = Path(self.temp.name) / 'roster.csv'
         roster.write_text('Iniziali;Codice\nAA;1234\nBB;2345\nCC;3456\nDD;0123\n', encoding='utf-8')
@@ -56,11 +58,11 @@ class PageLoadingTests(unittest.TestCase):
             self.assertEqual(charts.call_count, 0)
             self.assertEqual(len(self.app.dataframe), 0)
             self.select_tab('🏆 Classifica')
-            self.assertEqual(stats.call_count, 2)
+            self.assertEqual(stats.call_count, 1)
             self.assertEqual(history.call_count, 0)
             self.assertGreater(len(self.app.dataframe), 0)
             self.select_tab('📈 Grafici')
-            self.assertEqual(stats.call_count, 3)
+            self.assertEqual(stats.call_count, 1)
             self.assertEqual(history.call_count, 1)
             self.assertEqual(charts.call_count, 2)
 

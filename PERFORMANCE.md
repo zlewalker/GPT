@@ -1,5 +1,41 @@
 # Caricamento e ripristino
 
+## Aggiornamento dell'11 novembre 2026
+
+Questa sezione aggiorna il comportamento descritto sotto, mantenendo pool,
+caricamento della sola scheda attiva, accesso persistente e layout esistenti.
+
+- Cache in memoria del server, condivisa solo per statistiche aggregate, elenco
+  professori e medie per materia. Durata massima di riuso: 10 secondi; nessuna
+  scrittura su disco o nel localStorage del browser. La scadenza non introduce
+  aggiornamenti periodici: la prossima richiesta rilegge il database.
+- Il pulsante Aggiorna risultati svuota subito le cache; il voto e le modifiche
+  amministrative le svuotano solo dopo il commit riuscito. I risultati aggiornati
+  sono visibili al successivo caricamento senza attendere i 10 secondi.
+- Autenticazione, revoca, codici, token e lezioni personali non vengono messi in
+  cache: autorizzazione e vincolo contro il doppio voto restano verificati dal DB.
+- Il modulo Vota e' un fragment: le interazioni con la scelta della lezione
+  rieseguono solo quella sezione. Un voto riuscito aggiorna l'intera pagina.
+- La cache distingue database e schema e restituisce copie indipendenti dei dati.
+  Un altro processo/app puo' servire aggregati precedenti per un massimo di
+  10 secondi di riuso; Aggiorna risultati forza la lettura nel processo corrente.
+
+Nel test Vota -> Classifica -> Grafici, le letture delle statistiche scendono da
+tre a una. Questo misura richieste evitate, non promette tempi in millisecondi
+sull'hosting reale. Non sono state cambiate tabelle, dati o regole dei voti.
+
+### Rollback di questo aggiornamento
+
+Commit precedente: f33fd85bde5a808b9ed8bb521560530e494cfcbf
+Branch: rollback/pre-performance-2026-11-11
+Branch di lavoro: performance/connections-and-navigation
+
+Per tornare allo stato precedente, usare il tree del branch di rollback in un
+nuovo commit di ripristino su main, mantenendo la cronologia; in alternativa
+distribuire quel branch con gli stessi Secrets. Non ripristinare il database:
+i nuovi voti devono rimanere su Supabase. La copia locale di lavoro aggiornata
+e' in C:/codex/project_votes_performance; la cartella originale non e' sovrascritta.
+
 ## Ottimizzazioni
 
 - Streamlit 1.55 o superiore: le quattro schede mantengono la stessa interfaccia,

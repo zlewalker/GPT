@@ -12,6 +12,7 @@ import database as db
 import browser_session
 import mobile_ui
 import voter_auth
+import read_cache
 from rules import tier_for, rounded_score
 
 MIN_VOTES = 3
@@ -53,6 +54,7 @@ with st.container(key='page_actions'):
     action_columns = st.columns(2 if student_logged_in else 1)
     with action_columns[0]:
         st.button('🔄 Aggiorna risultati', key='refresh_results', width='stretch',
+                  on_click=read_cache.clear,
                   help='Carica i nuovi voti e aggiorna i risultati.')
     if student_logged_in:
         with action_columns[1]:
@@ -86,9 +88,8 @@ def show_top_three(stats):
         st.write(f"{position}. {teacher['name']} · {teacher['subject']} — {rounded_score(teacher['average_rating']):.2f}/5")
 
 
-# One fresh read per full page run, shared by all result sections.
-# No cross-user data cache: refresh and successful writes see current results.
-stats = db.teacher_stats()
+# Public results share a short cache; explicit refresh and writes clear it.
+stats = read_cache.teacher_stats()
 with st.expander('🏆 Top 3 professori'):
     show_top_three(stats)
 
@@ -105,93 +106,98 @@ def lesson_label(row):
     return f"{date_label} - {db.period_label(row['slot'])} - {row['teacher_name']} - {row['subject']} - {title} (#{row['id']}){voted}"
 
 
+@st.fragment
+def show_vote(student_token, storage_ready, student_logged_in):
+    st.subheader('Vota le lezioni')
+    st.caption('Scegli una lezione, valuta da 1 a 5 e conferma l’invio. Puoi votare anche le lezioni passate.')
+    if not storage_ready:
+        st.info('Recupero dell’accesso su questo browser…')
+    elif not student_logged_in:
+        st.caption('Il tuo accesso dura fino a 30 giorni su questo browser. Esci sempre dai dispositivi condivisi.')
+        with st.form('student_login', clear_on_submit=True):
+            code = st.text_input('Il tuo codice personale (4 cifre)', type='password', max_chars=4, key='login_code', autocomplete='off', placeholder='Le tue 4 cifre')
+            login_student = st.form_submit_button('Accedi per votare', type='primary', width='stretch')
+        if login_student:
+            try:
+                token, expires_at, retry_seconds = voter_auth.login(code)
+            except Exception:
+                st.error('Accesso non disponibile. Riprova più tardi o contatta l’amministratore.')
+            else:
+                if token:
+                    browser_session.remember(token, expires_at)
+                    st.rerun()
+                elif retry_seconds:
+                    st.error(f'Troppi tentativi errati. Nuovi accessi temporaneamente bloccati: riprova tra {(retry_seconds + 59) // 60} minuti.')
+                else:
+                    st.error('Codice non valido. Usa le quattro cifre ricevute privatamente.')
+    else:
+        st.caption('Accesso studente attivo')
+        include_voted = st.checkbox('Mostra anche le lezioni già votate', value=False)
+        try:
+            available = voter_auth.list_lessons(student_token, include_voted)
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            if not available:
+                st.info('Non ci sono lezioni da votare. Potresti averle già valutate tutte.')
+            else:
+                lookup = {row['id']: row for row in available}
+                selected = st.selectbox('Lezione', options=list(lookup), format_func=lambda lesson_id: lesson_label(lookup[lesson_id]), key='vote_lesson')
+                lesson = lookup[selected]
+                st.html(
+                    '<article class="pv-lesson" aria-label="Riepilogo della lezione">'
+                    f'<div class="pv-lesson-meta">{escape(datetime.strptime(lesson["lesson_date"], "%Y-%m-%d").strftime("%d/%m/%Y"))} · {escape(db.period_label(lesson["slot"]))}</div>'
+                    f'<div class="pv-lesson-title">{escape(lesson["topic"] or lesson["subject"])}</div>'
+                    f'<div class="pv-lesson-meta">{escape(lesson["teacher_name"])} · {escape(lesson["subject"])}</div>'
+                    '</article>'
+                )
+                if lesson['has_voted']:
+                    st.info('Hai già votato questa lezione. Il voto non può essere ripetuto.')
+                else:
+                    with st.form('form_vote'):
+                        rating = st.radio('Quanto valuti questa lezione?', [1, 2, 3, 4, 5], index=3, horizontal=True)
+                        st.caption('1 = valutazione più bassa · 5 = valutazione più alta')
+                        submitted = st.form_submit_button('Invia il voto', type='primary', width='stretch')
+                    if submitted:
+                        try:
+                            voter_auth.add_vote(selected, student_token, rating)
+                        except ValueError as exc:
+                            st.error(str(exc))
+                        except db.INTEGRITY_ERRORS:
+                            st.warning('Hai già votato questa lezione.')
+                        else:
+                            read_cache.clear()
+                            st.session_state['vote_saved'] = True
+                            st.rerun()
+    if st.session_state.pop('vote_saved', False):
+        st.success('Voto salvato! Grazie.')
+    st.caption('La partecipazione viene registrata separatamente dalla valutazione.')
+    with st.expander('Come votare, regole e riservatezza'):
+        st.markdown('''
+    1. **Accedi con il codice di 4 cifre** che hai ricevuto privatamente. Il sito può ricordare l’accesso su questo browser per 30 giorni; sui dispositivi condivisi premi “Esci” quando hai finito.
+    2. **Scegli la lezione** controllando data, Mattina/Pomeriggio, professore e titolo. Le ultime inserite sono in cima: puoi scorrere il menu o scrivere per cercare quelle più vecchie.
+    3. **Scegli un voto da 1 a 5 e premi “Invia il voto”.** Aspetta il messaggio “Voto salvato!”: selezionare il numero da solo non invia la valutazione.
+    ''')
+        st.caption('Il codice serve a registrare soltanto se hai già votato una lezione. Il voto è salvato separatamente, senza codice o iniziali, e nell’app vengono mostrati solo risultati aggregati dopo almeno 3 voti. Questa separazione protegge la tua riservatezza.')
+        st.info('Puoi recuperare anche le lezioni passate: non c’è una scadenza. Ogni lezione accetta un solo voto per codice, anche se dura 4 ore. Dopo l’invio il voto non può essere modificato.')
+        st.markdown('''
+**Perché una lezione scompare?** Dopo il voto viene tolta dall’elenco delle lezioni da valutare. Attiva **“Mostra anche le lezioni già votate”** per ritrovarla: sarà indicata come già votata e non potrai inviare un altro voto. Il voto precedente non viene mostrato.
+
+**Cosa significano i numeri?** 1 è la valutazione più bassa, 5 la più alta. Valuta l’esperienza della lezione a cui hai partecipato.
+
+**Dove vedo i risultati?** In **Classifica** trovi la media dei voti di ogni professore e la fascia da S (più alta) a D. La media appare dopo almeno **3 voti per professore**. In **Grafici** scegli una materia per vedere le medie delle singole lezioni: ogni punto richiede almeno **3 voti su quella lezione**. I risultati si aggiornano ricaricando la pagina o premendo **“Aggiorna risultati”** in alto nella pagina; la durata della lezione non dà più peso al voto.
+
+**Il voto è collegato alle mie iniziali?** Il registro della partecipazione tiene traccia delle lezioni già votate dal tuo codice. Le valutazioni sono conservate separatamente, senza codice o iniziali. Questa separazione protegge la riservatezza, ma non garantisce un anonimato assoluto.
+
+**Il codice non funziona o l’ho perso?** Controlla di avere inserito tutte e quattro le cifre del codice ricevuto. Se il problema resta, chiedi all’amministratore: inventare un nuovo codice non permette di votare.
+
+**Non vedo lezioni da votare?** Potresti averle già valutate tutte, oppure non sono ancora state inserite. Controlla l’opzione delle lezioni già votate o segnala la lezione mancante all’amministratore. La scheda **Gestione** è riservata a lui.
+''')
+
+
 with vote_tab:
     if vote_tab.open:
-        st.subheader('Vota le lezioni')
-        st.caption('Scegli una lezione, valuta da 1 a 5 e conferma l’invio. Puoi votare anche le lezioni passate.')
-        if not storage_ready:
-            st.info('Recupero dell’accesso su questo browser…')
-        elif not student_logged_in:
-            st.caption('Il tuo accesso dura fino a 30 giorni su questo browser. Esci sempre dai dispositivi condivisi.')
-            with st.form('student_login', clear_on_submit=True):
-                code = st.text_input('Il tuo codice personale (4 cifre)', type='password', max_chars=4, key='login_code', autocomplete='off', placeholder='Le tue 4 cifre')
-                login_student = st.form_submit_button('Accedi per votare', type='primary', width='stretch')
-            if login_student:
-                try:
-                    token, expires_at, retry_seconds = voter_auth.login(code)
-                except Exception:
-                    st.error('Accesso non disponibile. Riprova più tardi o contatta l’amministratore.')
-                else:
-                    if token:
-                        browser_session.remember(token, expires_at)
-                        st.rerun()
-                    elif retry_seconds:
-                        st.error(f'Troppi tentativi errati. Nuovi accessi temporaneamente bloccati: riprova tra {(retry_seconds + 59) // 60} minuti.')
-                    else:
-                        st.error('Codice non valido. Usa le quattro cifre ricevute privatamente.')
-        else:
-            st.caption('Accesso studente attivo')
-            include_voted = st.checkbox('Mostra anche le lezioni già votate', value=False)
-            try:
-                available = voter_auth.list_lessons(student_token, include_voted)
-            except ValueError as exc:
-                st.error(str(exc))
-            else:
-                if not available:
-                    st.info('Non ci sono lezioni da votare. Potresti averle già valutate tutte.')
-                else:
-                    lookup = {row['id']: row for row in available}
-                    selected = st.selectbox('Lezione', options=list(lookup), format_func=lambda lesson_id: lesson_label(lookup[lesson_id]), key='vote_lesson')
-                    lesson = lookup[selected]
-                    st.html(
-                        '<article class="pv-lesson" aria-label="Riepilogo della lezione">'
-                        f'<div class="pv-lesson-meta">{escape(datetime.strptime(lesson["lesson_date"], "%Y-%m-%d").strftime("%d/%m/%Y"))} · {escape(db.period_label(lesson["slot"]))}</div>'
-                        f'<div class="pv-lesson-title">{escape(lesson["topic"] or lesson["subject"])}</div>'
-                        f'<div class="pv-lesson-meta">{escape(lesson["teacher_name"])} · {escape(lesson["subject"])}</div>'
-                        '</article>'
-                    )
-                    if lesson['has_voted']:
-                        st.info('Hai già votato questa lezione. Il voto non può essere ripetuto.')
-                    else:
-                        with st.form('form_vote'):
-                            rating = st.radio('Quanto valuti questa lezione?', [1, 2, 3, 4, 5], index=3, horizontal=True)
-                            st.caption('1 = valutazione più bassa · 5 = valutazione più alta')
-                            submitted = st.form_submit_button('Invia il voto', type='primary', width='stretch')
-                        if submitted:
-                            try:
-                                voter_auth.add_vote(selected, student_token, rating)
-                            except ValueError as exc:
-                                st.error(str(exc))
-                            except db.INTEGRITY_ERRORS:
-                                st.warning('Hai già votato questa lezione.')
-                            else:
-                                st.session_state['vote_saved'] = True
-                                st.rerun()
-        if st.session_state.pop('vote_saved', False):
-            st.success('Voto salvato! Grazie.')
-        st.caption('La partecipazione viene registrata separatamente dalla valutazione.')
-        with st.expander('Come votare, regole e riservatezza'):
-            st.markdown('''
-        1. **Accedi con il codice di 4 cifre** che hai ricevuto privatamente. Il sito può ricordare l’accesso su questo browser per 30 giorni; sui dispositivi condivisi premi “Esci” quando hai finito.
-        2. **Scegli la lezione** controllando data, Mattina/Pomeriggio, professore e titolo. Le ultime inserite sono in cima: puoi scorrere il menu o scrivere per cercare quelle più vecchie.
-        3. **Scegli un voto da 1 a 5 e premi “Invia il voto”.** Aspetta il messaggio “Voto salvato!”: selezionare il numero da solo non invia la valutazione.
-        ''')
-            st.caption('Il codice serve a registrare soltanto se hai già votato una lezione. Il voto è salvato separatamente, senza codice o iniziali, e nell’app vengono mostrati solo risultati aggregati dopo almeno 3 voti. Questa separazione protegge la tua riservatezza.')
-            st.info('Puoi recuperare anche le lezioni passate: non c’è una scadenza. Ogni lezione accetta un solo voto per codice, anche se dura 4 ore. Dopo l’invio il voto non può essere modificato.')
-            st.markdown('''
-    **Perché una lezione scompare?** Dopo il voto viene tolta dall’elenco delle lezioni da valutare. Attiva **“Mostra anche le lezioni già votate”** per ritrovarla: sarà indicata come già votata e non potrai inviare un altro voto. Il voto precedente non viene mostrato.
-    
-    **Cosa significano i numeri?** 1 è la valutazione più bassa, 5 la più alta. Valuta l’esperienza della lezione a cui hai partecipato.
-    
-    **Dove vedo i risultati?** In **Classifica** trovi la media dei voti di ogni professore e la fascia da S (più alta) a D. La media appare dopo almeno **3 voti per professore**. In **Grafici** scegli una materia per vedere le medie delle singole lezioni: ogni punto richiede almeno **3 voti su quella lezione**. I risultati si aggiornano ricaricando la pagina o premendo **“Aggiorna risultati”** in alto nella pagina; la durata della lezione non dà più peso al voto.
-    
-    **Il voto è collegato alle mie iniziali?** Il registro della partecipazione tiene traccia delle lezioni già votate dal tuo codice. Le valutazioni sono conservate separatamente, senza codice o iniziali. Questa separazione protegge la riservatezza, ma non garantisce un anonimato assoluto.
-    
-    **Il codice non funziona o l’ho perso?** Controlla di avere inserito tutte e quattro le cifre del codice ricevuto. Se il problema resta, chiedi all’amministratore: inventare un nuovo codice non permette di votare.
-    
-    **Non vedo lezioni da votare?** Potresti averle già valutate tutte, oppure non sono ancora state inserite. Controlla l’opzione delle lezioni già votate o segnala la lezione mancante all’amministratore. La scheda **Gestione** è riservata a lui.
-    ''')
-
+        show_vote(student_token, storage_ready, student_logged_in)
 
 
 @st.fragment
@@ -300,7 +306,7 @@ def show_history(stats):
     st.divider()
     st.markdown('#### Medie delle singole lezioni per materia')
     subject = st.selectbox('Seleziona la materia', sorted({r['subject'] for r in teachers}), key='history_subject')
-    history = db.subject_history(subject, MIN_VOTES)
+    history = read_cache.subject_history(subject, MIN_VOTES)
     history.sort(key=lambda r: (r['lesson_date'], r['slot'], r['teacher_name']))
     if not history:
         st.info(f'Il grafico comparirà quando almeno una lezione avrà {MIN_VOTES} voti.')
@@ -428,11 +434,12 @@ with admin_tab:
                         except db.INTEGRITY_ERRORS:
                             st.warning('Questo professore con questa materia è già presente.')
                         else:
+                            read_cache.clear()
                             st.success('Professore aggiunto.')
                             st.rerun()
                 with b:
                     st.markdown('#### 2. Pianifica una lezione')
-                    options = db.list_teachers()
+                    options = read_cache.list_teachers()
                     if options:
                         with st.form('add_lesson', clear_on_submit=False):
                             who = st.selectbox(
@@ -454,6 +461,7 @@ with admin_tab:
                             except db.INTEGRITY_ERRORS:
                                 st.warning('Esiste già una lezione per questo professore, data e fascia.')
                             else:
+                                read_cache.clear()
                                 st.success('Lezione aggiunta.')
                                 st.rerun()
                     else:
@@ -474,6 +482,7 @@ with admin_tab:
                         except ValueError as exc:
                             st.error(str(exc))
                         else:
+                            read_cache.clear()
                             st.session_state['title_saved'] = True
                             st.rerun()
                     if st.session_state.pop('title_saved', False):
