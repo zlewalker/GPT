@@ -148,6 +148,37 @@ class DatabaseTests(unittest.TestCase):
             with self.subTest(score=score):
                 self.assertEqual(tier_for(score), expected)
         self.assertEqual(rounded_score(4.495), 4.5)
+        import migrate, json
+        payload = json.loads(migrate.export_backup_bytes().decode('utf-8'))
+        self.assertEqual(payload['format'], 1)
+        migrate.validate(payload['data'])
+
+    def test_ranking_orders_by_rounded_score_then_total_votes(self):
+        # Two teachers with the same displayed rounded average (4.33) are ordered by total_votes DESC.
+        db.add_teacher('Docente Molti Voti', 'Fisica')
+        many_id = next(t['id'] for t in db.list_teachers() if t['name'] == 'Docente Molti Voti')
+        db.add_lesson(many_id, '2026-11-11', 1, 'L1')
+        db.add_lesson(many_id, '2026-11-11', 5, 'L2')
+        many_lessons = db.lessons_on('2026-11-11')
+        for code, rating in [('1234', 5), ('2345', 4), ('3456', 4)]:
+            db.add_vote(many_lessons[0]['id'], code, rating)
+            db.add_vote(many_lessons[1]['id'], code, rating)
+        for code, rating in [('1234', 5), ('2345', 4), ('3456', 4)]:
+            db.add_vote(self.lessons[0]['id'], code, rating)
+        ranked = [r['name'] for r in db.teacher_stats() if r['total_votes'] > 0]
+        self.assertEqual(ranked, ['Docente Molti Voti', 'Prof. Prova'])
+        # Even if raw averages differ slightly (4.496 vs 4.504), equal rounded scores (4.50) sort by total_votes DESC, then raw average DESC.
+        sample = [
+            {'id': 1, 'name': 'Pochi Voti', 'subject': 'M1', 'total_votes': 3, 'rated_lessons': 1,
+             'rating_1': 0, 'rating_2': 0, 'rating_3': 0, 'rating_4': 1, 'rating_5': 2, 'average_rating': 4.504},
+            {'id': 2, 'name': 'Tanti Voti Minore', 'subject': 'M2', 'total_votes': 10, 'rated_lessons': 3,
+             'rating_1': 0, 'rating_2': 0, 'rating_3': 0, 'rating_4': 5, 'rating_5': 5, 'average_rating': 4.496},
+            {'id': 3, 'name': 'Tanti Voti Maggiore', 'subject': 'M3', 'total_votes': 10, 'rated_lessons': 3,
+             'rating_1': 0, 'rating_2': 0, 'rating_3': 0, 'rating_4': 5, 'rating_5': 5, 'average_rating': 4.504},
+        ]
+        with patch.object(db, '_dicts', side_effect=lambda cur: (cur.fetchall(), list(sample))[1]):
+            ordered = db.teacher_stats()
+        self.assertEqual([r['name'] for r in ordered], ['Tanti Voti Maggiore', 'Tanti Voti Minore', 'Pochi Voti'])
 
 
     def test_unknown_codes_are_rejected(self):

@@ -31,7 +31,7 @@ Questo README riunisce le precedenti guide su pubblicazione, sessioni, mobile, p
 ## Uso studenti
 
 1. Apri l'app e accedi con il codice personale di **quattro cifre** ricevuto privatamente. Inserisci soltanto i numeri, senza le iniziali; conserva eventuali zeri iniziali.
-2. In **Vota**, scegli **Singole lezioni** e controlla data, Mattina/Pomeriggio, professore, materia e titolo. Le ultime lezioni inserite sono in cima; il menu permette di cercare e scorrere quelle precedenti.
+2. In **Vota**, scegli **Singole lezioni**: l'app mostra il riepilogo personale delle lezioni valutate/mancanti e, se sono presenti più corsi, permette di filtrare per corso (`Materia — Professore`). Controlla data, Mattina/Pomeriggio, professore, materia e titolo: le ultime lezioni inserite sono in cima e il menu permette di cercare e scorrere quelle precedenti.
 3. Seleziona un voto da 1 a 5, premi **Invia il voto** e attendi la conferma. Scegliere soltanto il numero non salva la valutazione.
 
 Le lezioni già votate sono nascoste per impostazione iniziale: puoi mostrarle con l'apposita casella. Non puoi inviare un secondo voto né modificare quello precedente. Il voto precedente non viene mostrato.
@@ -48,7 +48,7 @@ Il browser può ricordare l'accesso per 30 giorni. Sui dispositivi condivisi pre
 - La media riepilogativa del grafico per materia considera i voti delle sole lezioni visibili; la classifica considera tutti i voti del professore.
 - Per vedere nuovi risultati premi **Aggiorna risultati** nella pagina o ricaricala. Non esiste più un aggiornamento periodico ogni 15 secondi.
 
-La media viene arrotondata a due decimali con i mezzi centesimi verso l'alto prima di assegnare il tier: `4,495 → 4,50 → S`.
+La media viene arrotondata a due decimali con i mezzi centesimi verso l'alto prima di assegnare il tier e ordinare la classifica (a parità di media arrotondata si ordina per numero di voti, poi media grezza e nome): `4,495 → 4,50 → S`.
 
 | Tier | Media arrotondata |
 | --- | --- |
@@ -62,7 +62,7 @@ Tutti i dati appartengono al **2026/2027**. La gestione di altri anni scolastici
 
 ## Gestione amministratore
 
-La scheda **Gestione** richiede il PIN configurato sul server. Permette di aggiungere professori e materie, pianificare lezioni, correggere titolo e fascia e gestire lo stato dei corsi.
+La scheda **Gestione** richiede il PIN configurato sul server. Permette di aggiungere professori e materie, pianificare lezioni, correggere titolo e fascia, gestire lo stato dei corsi, azzerare il blocco temporaneo degli accessi studenti e preparare/scaricare un backup JSON del database.
 
 - Pianifica una sola voce per lezione, scegliendo data e fascia. La durata è fissa: non è disponibile un selettore.
 - La modifica di titolo o fascia mantiene identificativo, voti e partecipazioni. Non cambia l'ordine di inserimento del menu.

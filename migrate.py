@@ -98,6 +98,18 @@ def save_backup(data, directory):
     return path
 
 
+def export_backup_bytes():
+    import database as db
+    if postgres.enabled():
+        with postgres.connect() as con:
+            con.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
+            data = read_rows(con)
+        validate(data)
+    else:
+        data = read_sqlite(db.DB_PATH)
+    return json.dumps({'format': 1, 'data': data}, ensure_ascii=False, indent=2).encode('utf-8')
+
+
 def verify(con, data):
     if read_rows(con) != {table: data.get(table, []) for table in TABLES}:
         raise ValueError('Confronto integrale fallito: transazione annullata.')

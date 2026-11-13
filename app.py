@@ -185,13 +185,21 @@ def show_vote(student_token, storage_ready, student_logged_in):
         else:
             include_voted = st.checkbox('Mostra anche le lezioni già votate', value=False)
             try:
-                available = voter_auth.list_lessons(student_token, include_voted)
+                all_lessons = voter_auth.list_lessons(student_token, True)
             except ValueError as exc:
                 st.error(str(exc))
             else:
+                voted_count = sum(1 for row in all_lessons if row['has_voted'])
+                st.caption(f'Lezioni valutate: {voted_count} su {len(all_lessons)} ({len(all_lessons) - voted_count} da votare)')
+                available = all_lessons if include_voted else [row for row in all_lessons if not row['has_voted']]
                 if not available:
                     st.info('Non ci sono lezioni da votare. Potresti averle già valutate tutte.')
                 else:
+                    courses_in_view = sorted({f"{row['subject']} — {row['teacher_name']}" for row in available})
+                    if len(courses_in_view) > 1:
+                        course_filter = st.selectbox('Filtra per corso', ['Tutti i corsi', *courses_in_view], key='vote_course_filter')
+                        if course_filter != 'Tutti i corsi':
+                            available = [row for row in available if f"{row['subject']} — {row['teacher_name']}" == course_filter]
                     lookup = {row['id']: row for row in available}
                     selected = st.selectbox('Lezione', options=list(lookup), format_func=lambda lesson_id: lesson_label(lookup[lesson_id]), key='vote_lesson')
                     lesson = lookup[selected]
@@ -300,7 +308,7 @@ def show_leaderboard(stats):
         for r in pending:
             st.write(f"• {r['name']} — {r['subject']}: {r['total_votes']}/{MIN_VOTES} voti")
 
-    st.caption('Tier: S ≥ 4,5 · A ≥ 4,0 · B ≥ 3,0 · C ≥ 2,0 · D < 2,0. Media arrotondata a 2 decimali; a parità di soglia si assegna il tier superiore. Per aggiornare i risultati, premi “Aggiorna risultati” nella barra laterale o ricarica la pagina.')
+    st.caption('Tier: S ≥ 4,5 · A ≥ 4,0 · B ≥ 3,0 · C ≥ 2,0 · D < 2,0. Media arrotondata a 2 decimali; a parità di soglia si assegna il tier superiore. Per aggiornare i risultati, premi “Aggiorna risultati” in alto nella pagina o ricarica la pagina.')
 
 
 with leaderboard_tab:
@@ -431,7 +439,7 @@ def show_history(stats):
         ],
         'config': {'view': {'stroke': None}, 'axis': {'gridOpacity': 0.15, 'domain': False, 'tickSize': 0, 'labelFontSize': 12, 'titleFontSize': 12}, 'legend': {'labelFontSize': 12, 'titleFontSize': 12}},
     }, width='stretch')
-    st.caption(f'Ogni punto rappresenta una lezione con almeno {MIN_VOTES} voti, in ordine cronologico. M = mattina, P = pomeriggio. Tocca i punti o apri il dettaglio delle lezioni. La media riepilogativa pesa ogni voto allo stesso modo e include solo le lezioni visibili. Per aggiornare i risultati, premi “Aggiorna risultati” nella barra laterale o ricarica la pagina.')
+    st.caption(f'Ogni punto rappresenta una lezione con almeno {MIN_VOTES} voti, in ordine cronologico. M = mattina, P = pomeriggio. Tocca i punti o apri il dettaglio delle lezioni. La media riepilogativa pesa ogni voto allo stesso modo e include solo le lezioni visibili. Per aggiornare i risultati, premi “Aggiorna risultati” in alto nella pagina o ricarica la pagina.')
     if len(frame) == 1:
         st.info('Per questa materia è disponibile una sola lezione con il minimo di voti: al momento viene mostrato un solo punto.')
     with st.expander('Dettaglio delle lezioni'):
@@ -471,9 +479,40 @@ with admin_tab:
             else:
                 if st.button('Esci dalla Gestione'):
                     st.session_state['is_admin'] = False
+                    st.session_state.pop('admin_backup_bytes', None)
+                    st.session_state.pop('admin_backup_name', None)
                     st.rerun()
                 st.success('Accesso amministratore attivo.')
                 st.caption(f'Studenti con codice registrato: {db.student_count()}')
+                admin_col1, admin_col2 = st.columns(2)
+                with admin_col1:
+                    if st.button('Resetta blocco accessi studenti', key='reset_student_logins', width='stretch'):
+                        try:
+                            voter_auth.reset_login_failures()
+                        except Exception:
+                            st.error('Impossibile azzerare il blocco accessi studenti.')
+                        else:
+                            st.session_state['student_logins_reset'] = True
+                            st.rerun()
+                with admin_col2:
+                    if st.button('Prepara backup JSON', key='prepare_backup', width='stretch'):
+                        try:
+                            import migrate
+                            st.session_state['admin_backup_bytes'] = migrate.export_backup_bytes()
+                            st.session_state['admin_backup_name'] = f"votes_private_{datetime.now(ROME).strftime('%Y%m%d_%H%M%S')}.json"
+                        except Exception:
+                            st.error('Impossibile preparare il backup del database.')
+                    if st.session_state.get('admin_backup_bytes'):
+                        st.download_button(
+                            '📥 Scarica backup JSON',
+                            data=st.session_state['admin_backup_bytes'],
+                            file_name=st.session_state['admin_backup_name'],
+                            mime='application/json',
+                            key='download_backup',
+                            width='stretch',
+                        )
+                if st.session_state.pop('student_logins_reset', False):
+                    st.success('Blocco accessi studenti azzerato.')
                 a, b = st.columns(2)
                 with a:
                     st.markdown('#### 1. Aggiungi un professore')

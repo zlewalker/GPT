@@ -87,6 +87,17 @@ def logout(token):
         con.execute('DELETE FROM student_sessions WHERE token_hash = ?', (token_hash,))
 
 
+def reset_login_failures(now=None):
+    now = int(time.time()) if now is None else int(now)
+    with db.connect() as con:
+        db.begin_write(con)
+        for key, value in [('student_login_window', now), ('student_login_failures', 0)]:
+            con.execute(
+                'INSERT INTO settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+                (key, str(value)),
+            )
+
+
 def list_lessons(token, include_voted=False):
     with db.connect() as con:
         digest = _session_digest(con, token)

@@ -242,8 +242,9 @@ def _record_vote(con, lesson_id, digest, rating):
 
 
 def teacher_stats():
+    from rules import rounded_score
     with connect() as con:
-        return _dicts(con.execute('''
+        rows = _dicts(con.execute('''
             SELECT t.id, t.name, t.subject,
                    COUNT(v.id) AS total_votes,
                    COUNT(DISTINCT CASE WHEN v.id IS NOT NULL THEN l.id END) AS rated_lessons,
@@ -260,6 +261,15 @@ def teacher_stats():
             ORDER BY (AVG(v.rating) IS NULL), AVG(v.rating) DESC, COUNT(v.id) DESC,
                      LOWER(t.name)
         '''))
+    rows.sort(key=lambda r: (
+        r['average_rating'] is None,
+        -(rounded_score(r['average_rating']) if r['average_rating'] is not None else 0.0),
+        -int(r['total_votes']),
+        -(float(r['average_rating']) if r['average_rating'] is not None else 0.0),
+        r['name'].lower(),
+        r['subject'].lower(),
+    ))
+    return rows
 
 
 def teacher_history(teacher_id, min_votes_per_lesson=3):

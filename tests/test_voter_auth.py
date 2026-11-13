@@ -67,7 +67,12 @@ class SessionCases:
         self.assertGreater(retry, 0)
         db.init_db()  # New page/process cannot clear the database limit.
         self.assertIsNone(auth.login('0123', now=103)[0])
-        self.assertIsNotNone(auth.login('0123', now=100 + auth.LOGIN_WINDOW)[0])
+        auth.reset_login_failures(now=104)
+        self.assertIsNotNone(auth.login('0123', now=105)[0])
+        for _ in range(auth.MAX_FAILURES):
+            self.assertIsNone(auth.login('9999', now=106)[0])
+        self.assertIsNone(auth.login('0123', now=107)[0])
+        self.assertIsNotNone(auth.login('0123', now=106 + auth.LOGIN_WINDOW)[0])
 
     def test_failed_vote_keeps_session_and_rolls_back_participation(self):
         token, _, _ = auth.login('0123')

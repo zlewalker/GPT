@@ -166,3 +166,27 @@ class PageLoadingTests(unittest.TestCase):
         self.assertEqual(len(self.app.exception), 0)
         self.assertFalse(db.list_teachers()[0]['is_closed'])
         self.assertEqual(db.teacher_stats()[0]['total_votes'], 3)
+
+    def test_course_filter_and_admin_reset_and_backup_controls(self):
+        import voter_auth
+        db.add_teacher('Secondo docente', 'Storia')
+        second_id = next(t['id'] for t in db.list_teachers() if t['name'] == 'Secondo docente')
+        db.add_lesson(second_id, '2026-11-12', 1, 'Rivoluzione')
+        for _ in range(voter_auth.MAX_FAILURES):
+            voter_auth.login('9999')
+        self.assertIsNone(voter_auth.login('0123')[0])
+        self.app.run()
+        self.select_tab('⚙️ Gestione')
+        next(field for field in self.app.text_input if field.label == 'PIN amministratore').input('test-only-pin')
+        next(b for b in self.app.button if b.label == 'Accedi').click().run()
+        self.app.button(key='reset_student_logins').click().run()
+        self.assertTrue(any('Blocco accessi studenti azzerato.' in m.value for m in self.app.success))
+        self.app.button(key='prepare_backup').click().run()
+        self.assertIsNotNone(self.app.session_state['admin_backup_bytes'])
+        next(b for b in self.app.button if b.label == 'Esci dalla Gestione').click().run()
+        self.assertNotIn('admin_backup_bytes', self.app.session_state)
+        self.select_tab('🗳️ Vota')
+        self.app.text_input(key='login_code').input('0123')
+        next(b for b in self.app.button if b.label == 'Accedi per votare').click().run()
+        self.app.selectbox(key='vote_course_filter').select('Storia — Secondo docente').run()
+        self.assertEqual(len(self.app.selectbox(key='vote_lesson').options), 1)

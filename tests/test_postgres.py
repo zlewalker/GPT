@@ -203,6 +203,8 @@ class PostgresTests(unittest.TestCase):
             self.assertTrue(voter_auth.is_authenticated(token))
             voter_auth.add_vote(self.lessons[0]['id'], token, 5)
             self.assertEqual(len(voter_auth.list_lessons(token)), 1)
+            voter_auth.reset_login_failures()
+            self.assertTrue(migrate.export_backup_bytes().startswith(b'{'))
             voter_auth.logout(token)
             self.assertFalse(voter_auth.is_authenticated(token))
         self.assertEqual(db.teacher_stats()[0]['total_votes'], 1)
